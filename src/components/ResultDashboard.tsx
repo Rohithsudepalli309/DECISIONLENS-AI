@@ -27,6 +27,26 @@ const binData = (values: number[], bins: number = 40) => {
   }))
 }
 
+const getExecutiveCommentary = (results: DashboardResults) => {
+  if (results.ranked_options.length < 2) return "Insufficient alternatives for comparative analysis."
+  
+  const top = results.ranked_options[0]
+  const second = results.ranked_options[1]
+  
+  const costDiff = ((second.metrics.cost - top.metrics.cost) / top.metrics.cost) * 100
+  const riskDiff = ((top.metrics.risk - second.metrics.risk) / top.metrics.risk) * 100
+  
+  if (top.topsis_score > second.topsis_score + 0.15) {
+    return `${top.option} holds a mathematically dominant lead. Its strategic alignment across all vectors outperforms ${second.option} with significant margin.`
+  }
+  
+  if (costDiff > 10 && riskDiff > 10) {
+    return `${top.option} is the efficient choice. While ${second.option} offers ${riskDiff.toFixed(0)}% lower risk, it requires a ${costDiff.toFixed(0)}% premium in operational cost.`
+  }
+  
+  return `The tradeoff between ${top.option} and ${second.option} is marginal. ${top.option} is favored for its balanced profile, but sector-specific volatility may favor ${second.option}.`
+}
+
 import { RadarChart, RadarData } from "./RadarChart"
 import axios from "axios"
 
@@ -120,7 +140,6 @@ export function ResultDashboard({ results: initialResults }: { results: Dashboar
     availability: opt.metrics.availability,
     risk: 1 - opt.metrics.risk
   }))
-
 
   return (
     <div className="space-y-8 pb-20 relative">
@@ -283,8 +302,23 @@ export function ResultDashboard({ results: initialResults }: { results: Dashboar
                    </div>
                 </div>
                 <p className="text-[10px] text-white/40 leading-relaxed italic">
-                  Deterministic analysis identifies {results.ranked_options[0].option} as the statistically dominant path with minimal variance.
+                    Deterministic analysis identifies {results.ranked_options[0].option} as the statistically dominant path with minimal variance.
                 </p>
+             </div>
+          </div>
+
+          <div className="glass-card bg-purple-500/5 border-purple-500/20 relative overflow-hidden">
+             <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                   <h4 className="text-xs font-black uppercase tracking-widest text-purple-400">Executive Commentary</h4>
+                </div>
+                <p className="text-xs text-white/70 leading-relaxed font-medium">
+                   {getExecutiveCommentary(results)}
+                </p>
+                <div className="pt-2 flex gap-2">
+                   <span className="px-2 py-0.5 rounded bg-purple-500/10 text-[8px] font-black text-purple-400 uppercase">MCDA Verified</span>
+                   <span className="px-2 py-0.5 rounded bg-white/5 text-[8px] font-black text-white/40 uppercase">Deterministic</span>
+                </div>
              </div>
           </div>
         </div>

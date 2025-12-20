@@ -125,15 +125,40 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
                 <div>
                   <label className="text-sm font-medium text-white/60 mb-2 block">Decision Domain</label>
                   <select 
-                    className="w-full glass-input h-12 text-xs font-bold uppercase tracking-widest cursor-pointer hover:bg-white/5"
-                    value={formData.domain}
-                    onChange={(e) => setFormData({...formData, domain: e.target.value})}
-                  >
-                    <option value="cloud">Infrastructure Expansion</option>
-                    <option value="energy">Energy Portfolio Optimization</option>
-                    <option value="medical">Biotechnical Resource Allocation</option>
-                    <option value="defense">Strategic Deterrence Analysis</option>
-                  </select>
+                  className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all appearance-none cursor-pointer"
+                  value={formData.domain}
+                  onChange={(e) => {
+                    const domain = e.target.value
+                    let options = formData.options
+                    if (domain === "Energy Transition") {
+                      options = [
+                        { name: "Offshore Wind Alpha", parameters: { base_cost: 45000, risk: 0.15, availability: 0.85 } },
+                        { name: "Next-Gen Nuclear", parameters: { base_cost: 95000, risk: 0.05, availability: 0.98 } }
+                      ]
+                    } else if (domain === "Supply Chain Resiliency") {
+                      options = [
+                        { name: "Near-Shoring Hub", parameters: { base_cost: 25000, risk: 0.08, availability: 0.95 } },
+                        { name: "Distributed Buffer", parameters: { base_cost: 15000, risk: 0.25, availability: 0.99 } }
+                      ]
+                    } else if (domain === "cloud") {
+                      options = [
+                        { name: "Alternative A", parameters: { base_cost: 8000, risk: 0.1, availability: 0.99 } },
+                        { name: "Alternative B", parameters: { base_cost: 12000, risk: 0.05, availability: 0.999 } }
+                      ]
+                    } else if (domain === "custom") {
+                      options = [
+                        { name: "Alternative A", parameters: { base_cost: 10000, risk: 0.1, availability: 0.95 } },
+                        { name: "Alternative B", parameters: { base_cost: 10000, risk: 0.1, availability: 0.95 } }
+                      ]
+                    }
+                    setFormData({ ...formData, domain, options })
+                  }}
+                >
+                  <option value="cloud">Cloud Infrastructure</option>
+                  <option value="Energy Transition">Energy Transition (Renewables/Grid)</option>
+                  <option value="Supply Chain Resiliency">Supply Chain Resiliency</option>
+                  <option value="custom">Custom Strategic Domain</option>
+                </select>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-white/60 mb-2 block">Primary Goal</label>
