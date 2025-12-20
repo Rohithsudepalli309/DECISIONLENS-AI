@@ -1,0 +1,35 @@
+Γû▓ Next.js 16.1.0 (Turbopack)
+
+  Creating an optimized production build ...
+Error: `@utility glass-card:hover` defines an invalid utility name. Utilities should be alphanumeric and start with a lowercase letter.
+    [at D:\AI PROJECT HUB\DECISIONLENS AI\decisionlens-ai\web-ui\node_modules\tailwindcss\dist\lib.js:32:3856]
+    [at Rr (D:\AI PROJECT HUB\DECISIONLENS AI\decisionlens-ai\web-ui\node_modules\tailwindcss\dist\lib.js:3:1718)]
+    [at _ (D:\AI PROJECT HUB\DECISIONLENS AI\decisionlens-ai\web-ui\node_modules\tailwindcss\dist\lib.js:3:1377)]
+    [at un (D:\AI PROJECT HUB\DECISIONLENS AI\decisionlens-ai\web-ui\node_modules\tailwindcss\dist\lib.js:32:2712)]
+    [at async cn (D:\AI PROJECT HUB\DECISIONLENS AI\decisionlens-ai\web-ui\node_modules\tailwindcss\dist\lib.js:38:631)]
+    [at async Xr (D:\AI PROJECT HUB\DECISIONLENS AI\decisionlens-ai\web-ui\node_modules\@tailwindcss\node\dist\index.js:10:3417)]
+    [at async I (D:\AI PROJECT HUB\DECISIONLENS AI\decisionlens-ai\web-ui\node_modules\@tailwindcss\postcss\dist\index.js:10:3977)]
+    [at async Object.Once (D:\AI PROJECT HUB\DECISIONLENS AI\decisionlens-ai\web-ui\node_modules\@tailwindcss\postcss\dist\index.js:10:4249)]
+    at async LazyResult.runAsync (node_modules/postcss/lib/lazy-result.js:293:11) [D:\AI PROJECT HUB\DECISIONLENS AI\decisionlens-ai\web-ui\.next\build\chunks\node_modules_fe693df6._.js:6206:21]
+    at async transform (turbopack:///[turbopack-node]/transforms/postcss.ts:70:34) [D:\AI PROJECT HUB\DECISIONLENS AI\decisionlens-ai\web-ui\.next\build\chunks\[root-of-the-server]__51225daf._.js:146:36]
+
+> Build error occurred
+Error: Turbopack build failed with 1 errors:
+./src/app/globals.css
+Error evaluating Node.js code
+CssSyntaxError: tailwindcss: D:\AI PROJECT HUB\DECISIONLENS AI\decisionlens-ai\web-ui\src\app\globals.css:1:1: `@utility glass-card:hover` defines an invalid utility name. Utilities should be alphanumeric and start with a lowercase letter.
+    at Input.error (node_modules/postcss/lib/input.js:135:16) [D:\AI PROJECT HUB\DECISIONLENS AI\decisionlens-ai\web-ui\.next\build\chunks\node_modules_fe693df6._.js:4651:22]
+    at Root.error (node_modules/postcss/lib/node.js:146:32) [D:\AI PROJECT HUB\DECISIONLENS AI\decisionlens-ai\web-ui\.next\build\chunks\node_modules_fe693df6._.js:928:38]
+    [at Object.Once (D:\AI PROJECT HUB\DECISIONLENS AI\decisionlens-ai\web-ui\node_modules\@tailwindcss\postcss\dist\index.js:10:6911)]
+    at async LazyResult.runAsync (node_modules/postcss/lib/lazy-result.js:293:11) [D:\AI PROJECT HUB\DECISIONLENS AI\decisionlens-ai\web-ui\.next\build\chunks\node_modules_fe693df6._.js:6206:21]
+    at async transform (turbopack:///[turbopack-node]/transforms/postcss.ts:70:34) [D:\AI PROJECT HUB\DECISIONLENS AI\decisionlens-ai\web-ui\.next\build\chunks\[root-of-the-server]__51225daf._.js:146:36]
+    at async run (turbopack:///[turbopack-node]/ipc/evaluate.ts:92:23) [D:\AI PROJECT HUB\DECISIONLENS AI\decisionlens-ai\web-ui\.next\build\chunks\[root-of-the-server]__974941ed._.js:443:31]
+
+Import trace:
+  Client Component Browser:
+    ./src/app/globals.css [Client Component Browser]
+    ./src/app/layout.tsx [Server Component]
+
+
+    at async transform (turbopack:///[turbopack-node]/transforms/postcss.ts:70:34) [D:\AI PROJECT HUB\DECISIONLENS AI\decisionlens-ai\web-ui\.next\build\chunks\[root-of-the-server]__51225daf._.js:146:36])
+    at async run (turbopack:///[turbopack-node]/ipc/evaluate.ts:92:23) [D:\AI PROJECT HUB\DECISIONLENS AI\decisionlens-ai\web-ui\.next\build\chunks\[root-of-the-server]__974941ed._.js:443:31])
