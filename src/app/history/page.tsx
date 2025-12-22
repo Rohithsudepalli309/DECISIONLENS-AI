@@ -1,10 +1,14 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { Navbar } from "@/components/Navbar"
-import { Calendar, Tag, Target, ChevronRight, Search, Filter } from "lucide-react"
 import axios from "axios"
+import { useAuthStore } from "@/store/useAuthStore"
+import { useDecisionStore } from "@/store/useDecisionStore"
+import { useRouter } from "next/navigation"
+import { Calendar, Tag, Target, ChevronRight, Search, Filter, Activity, Play, Download } from "lucide-react"
+import { Toast, ToastType } from "@/components/Toast"
 
 interface AuditItem {
   id: number
@@ -17,20 +21,80 @@ interface AuditItem {
   preferences?: string[]
   strategy?: string
   simulation_results?: Array<{ option: string; score: number }>
+  options?: Array<{ name: string; parameters: Record<string, number> }>
+  weights?: number[]
 }
 
 export default function AuditHistory() {
+  const { isLoggedIn, hasHydrated: authHydrated } = useAuthStore()
+  const { setFormData, setResults, setView, hasHydrated: decisionHydrated } = useDecisionStore()
+  const router = useRouter()
   const [audits, setAudits] = useState<AuditItem[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [filterDomain, setFilterDomain] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [isComparing, setIsComparing] = useState(false)
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null)
+
+  const showToast = (message: string, type: ToastType = 'info') => {
+    setToast({ message, type })
+  }
 
   useEffect(() => {
+    if (authHydrated && !isLoggedIn) {
+      router.push("/login")
+    }
+  }, [isLoggedIn, authHydrated, router])
+
+  const restoreActivity = (audit: AuditItem) => {
+    // 1. Reconstruct DecisionData
+    const decisionData = {
+      domain: audit.domain,
+      goal: audit.goal,
+      constraints: (audit.constraints as any) || { max_cost: 50000, min_availability: 0.95 },
+      preferences: audit.preferences || ["cost", "reliability"],
+      options: audit.options || [],
+      weights: audit.weights || [0.4, 0.4, 0.2]
+    }
+
+    setFormData(decisionData as any)
+    
+    // 2. Load results if they exist (formatted for store)
+    if (audit.simulation_results) {
+       // Mock the distribution data since we don't save raw distributions in the DB yet
+       // but we want the UI to feel "restored"
+       setResults({
+         strategy: audit.strategy || "TOPSIS",
+         domain: audit.domain,
+         ranked_options: audit.simulation_results.map(r => ({
+           option: r.option,
+           topsis_score: r.score,
+           metrics: { cost: 0, availability: 0, risk: 0 }
+         })),
+         simulations: [],
+         disclaimer: "Restored from Audit Archive."
+       } as any)
+       setView("results")
+    } else {
+       setView("stepper")
+    }
+    
+    showToast("Session restored to interactive dashboard", "success")
+    setTimeout(() => router.push("/"), 500)
+  }
+
+  const exportPDF = (e: React.MouseEvent, id: number | string) => {
+    e.stopPropagation()
+    window.open(`http://localhost:8001/decision/export/${id}`, '_blank')
+    showToast("Executive Report generated", "info")
+  }
+
+  useEffect(() => {
+    if (!isLoggedIn || !authHydrated || !decisionHydrated) return
     const fetchHistory = async () => {
       try {
-        const res = await axios.get("http://127.0.0.1:8000/decision/history")
+        const res = await axios.get("http://localhost:8001/decision/history")
         setAudits(res.data)
       } catch (err) {
         console.error("Failed to fetch history", err)
@@ -39,7 +103,9 @@ export default function AuditHistory() {
       }
     }
     fetchHistory()
-  }, [])
+  }, [isLoggedIn, authHydrated, decisionHydrated])
+
+  if (!authHydrated || !decisionHydrated || !isLoggedIn) return null
 
   const filteredAudits = audits.filter((item: AuditItem) => {
     const matchesSearch = item.goal.toLowerCase().includes(search.toLowerCase()) || 
@@ -216,6 +282,25 @@ export default function AuditHistory() {
                       <p className="text-[10px] uppercase font-bold text-white/40 mb-1">Score</p>
                       <p className="font-mono text-xl font-black">{(item.score * 100).toFixed(1)}%</p>
                     </div>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={(e) => exportPDF(e, item.id)}
+                        className="p-3 rounded-xl bg-white/5 text-white/40 border border-white/10 hover:bg-white/10 transition-all flex items-center justify-center"
+                        title="Download Report"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          restoreActivity(item)
+                        }}
+                        className="p-3 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600 transition-all flex items-center gap-2 group/btn"
+                      >
+                        <Play className="w-4 h-4 fill-current group-hover/btn:translate-x-0.5 transition-transform" />
+                        <span className="text-[10px] font-black uppercase tracking-widest hidden md:block">Restore Session</span>
+                      </button>
+                    </div>
                     <ChevronRight className="w-5 h-5 text-white/20 group-hover:text-white transition-colors" />
                   </div>
                 </div>
@@ -247,6 +332,15 @@ export default function AuditHistory() {
           </motion.div>
         )}
       </div>
+      <AnimatePresence>
+        {toast && (
+          <Toast 
+            message={toast.message} 
+            type={toast.type} 
+            onClose={() => setToast(null)} 
+          />
+        )}
+      </AnimatePresence>
     </main>
   )
 }

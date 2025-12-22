@@ -4,11 +4,19 @@ import React from "react"
 import { BrainCircuit, Command } from "lucide-react"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
+import { useAuthStore } from "@/store/useAuthStore"
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = React.useState(false)
   const pathname = usePathname()
+  const router = useRouter()
+  const { isLoggedIn, user, logout } = useAuthStore()
+
+  const handleLogout = () => {
+    logout()
+    router.push("/login")
+  }
 
   React.useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20)
@@ -44,12 +52,27 @@ export function Navbar() {
             <Command className="w-3 h-3" />
             <span>K</span>
           </div>
-          <Link 
-            href="/login"
-            className="px-6 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-bold uppercase tracking-widest hover:bg-white/10 transition-all"
-          >
-            Terminal Access
-          </Link>
+          {isLoggedIn ? (
+            <div className="flex items-center gap-4">
+              <div className="hidden lg:flex flex-col items-end">
+                <span className="text-[8px] font-black text-white/20 uppercase tracking-widest leading-none mb-1">Assigned Station</span>
+                <span className="text-[10px] font-bold text-blue-400 font-mono leading-none uppercase">{user?.terminalId}</span>
+              </div>
+              <button 
+                onClick={handleLogout}
+                className="px-6 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-[10px] font-black uppercase text-red-500 hover:bg-red-500/20 transition-all"
+              >
+                Sign Off
+              </button>
+            </div>
+          ) : (
+            <Link 
+              href="/login"
+              className="px-6 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-bold uppercase tracking-widest hover:bg-white/10 transition-all"
+            >
+              Terminal Access
+            </Link>
+          )}
         </div>
       </div>
     </nav>

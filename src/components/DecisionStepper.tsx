@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState } from "react"
+import React from "react"
+import { useDecisionStore } from "@/store/useDecisionStore"
 import { motion, AnimatePresence } from "framer-motion"
 import { ChevronRight, ChevronLeft, DollarSign, Activity, Check } from "lucide-react"
 
@@ -26,21 +27,11 @@ export interface DecisionData {
 }
 
 export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData) => void }) {
-  const [step, setStep] = useState(1)
-  const [formData, setFormData] = useState<DecisionData>({
-    domain: "cloud",
-    goal: "",
-    constraints: {
-      max_cost: 10000,
-      min_availability: 0.99
-    },
-    preferences: ["cost", "reliability"],
-    options: [
-      { name: "Alternative A", parameters: { base_cost: 8000, risk: 0.1, availability: 0.99 } },
-      { name: "Alternative B", parameters: { base_cost: 12000, risk: 0.05, availability: 0.999 } }
-    ],
-    weights: [0.4, 0.4, 0.2]
-  })
+  const { formData, setFormData, currentStep: step, setStep } = useDecisionStore()
+  
+  // Hydration check to prevent mismatch
+  const hasHydrated = useDecisionStore(s => s.hasHydrated)
+  if (!hasHydrated) return null
 
   const addOption = () => {
     setFormData({
@@ -81,8 +72,8 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
     setFormData({ ...formData, weights: normalized })
   }
 
-  const nextStep = () => setStep(s => s + 1)
-  const prevStep = () => setStep(s => s - 1)
+  const nextStep = () => setStep(step + 1)
+  const prevStep = () => setStep(step - 1)
 
   return (
     <div className="max-w-xl mx-auto mt-12">

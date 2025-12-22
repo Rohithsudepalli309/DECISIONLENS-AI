@@ -4,11 +4,13 @@ import React, { useState } from "react"
 import { motion } from "framer-motion"
 import { BrainCircuit, Lock, Mail, ArrowRight, Github, Chrome } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useAuthStore } from "@/store/useAuthStore"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
+  const login = useAuthStore((state) => state.login)
   const router = useRouter()
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -16,9 +18,9 @@ export default function LoginPage() {
     setLoading(true)
     
     // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    await new Promise(resolve => setTimeout(resolve, 1500))
     
-    localStorage.setItem("isLoggedIn", "true")
+    login(email)
     router.push("/")
     setLoading(false)
   }
