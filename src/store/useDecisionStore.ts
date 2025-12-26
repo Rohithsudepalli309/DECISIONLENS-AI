@@ -2,7 +2,8 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { DecisionData } from '@/components/DecisionStepper'
 
-interface DecisionResults {
+export interface DecisionResults {
+  id?: number;
   strategy: string;
   domain: string;
   ranked_options: {
@@ -28,20 +29,34 @@ interface DecisionResults {
     };
   }[];
   disclaimer: string;
+  sensitivity?: {
+    stability_index: number;
+    margin: number;
+    is_robust: boolean;
+    critical_vectors: string[];
+  };
+}
+
+interface Guardrails {
+  iterations: number
+  confidenceLevel: number
+  volatilityThreshold: number
 }
 
 interface DecisionState {
   formData: DecisionData
   currentStep: number
   results: DecisionResults | null
-  activeView: 'hero' | 'stepper' | 'results'
+  activeView: 'hero' | 'stepper' | 'results' | 'settings'
   hasHydrated: boolean
+  guardrails: Guardrails
   
   setFormData: (data: DecisionData) => void
   setStep: (step: number) => void
   setResults: (results: DecisionResults | null) => void
-  setView: (view: 'hero' | 'stepper' | 'results') => void
+  setView: (view: 'hero' | 'stepper' | 'results' | 'settings') => void
   setHasHydrated: (state: boolean) => void
+  setGuardrails: (guardrails: Guardrails) => void
   resetDecision: () => void
 }
 
@@ -60,6 +75,12 @@ const initialFormData: DecisionData = {
   weights: [0.4, 0.4, 0.2]
 }
 
+const defaultGuardrails: Guardrails = {
+  iterations: 1000,
+  confidenceLevel: 0.95,
+  volatilityThreshold: 0.1
+}
+
 export const useDecisionStore = create<DecisionState>()(
   persist(
     (set) => ({
@@ -68,17 +89,20 @@ export const useDecisionStore = create<DecisionState>()(
       results: null,
       activeView: 'hero',
       hasHydrated: false,
+      guardrails: defaultGuardrails,
 
       setFormData: (data) => set({ formData: data }),
       setStep: (step) => set({ currentStep: step }),
       setResults: (results) => set({ results }),
       setView: (view) => set({ activeView: view }),
       setHasHydrated: (state) => set({ hasHydrated: state }),
+      setGuardrails: (guardrails) => set({ guardrails }),
       resetDecision: () => set({ 
         formData: initialFormData, 
         currentStep: 1, 
         results: null, 
-        activeView: 'hero' 
+        activeView: 'hero',
+        guardrails: defaultGuardrails
       }),
     }),
     {

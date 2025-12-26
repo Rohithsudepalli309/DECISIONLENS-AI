@@ -1,0 +1,39 @@
+{
+  "name": "DecisionLens AI Ultimate",
+  "short_name": "DecisionLens",
+  "description": "High-fidelity strategic decision support platform.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050505",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New Simulation",
+      "url": "/?view=stepper",
+      "icons": [{ "src": "/icon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Audit History",
+      "url": "/history",
+      "icons": [{ "src": "/icon.svg", "sizes": "any" }]
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "screenshots": [
+    {
+      "src": "/decision_ai_bg.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Enterprise Strategic Dashboard"
+    }
+  ]
+}

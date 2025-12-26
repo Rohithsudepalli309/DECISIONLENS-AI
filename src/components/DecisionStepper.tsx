@@ -3,7 +3,8 @@
 import React from "react"
 import { useDecisionStore } from "@/store/useDecisionStore"
 import { motion, AnimatePresence } from "framer-motion"
-import { ChevronRight, ChevronLeft, DollarSign, Activity, Check } from "lucide-react"
+import { ChevronRight, ChevronLeft, IndianRupee, Activity, Check } from "lucide-react"
+import { useHaptics } from "@/hooks/useHaptics"
 
 interface OptionItem {
   name: string;
@@ -28,6 +29,7 @@ export interface DecisionData {
 
 export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData) => void }) {
   const { formData, setFormData, currentStep: step, setStep } = useDecisionStore()
+  const haptics = useHaptics()
   
   // Hydration check to prevent mismatch
   const hasHydrated = useDecisionStore(s => s.hasHydrated)
@@ -72,27 +74,33 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
     setFormData({ ...formData, weights: normalized })
   }
 
-  const nextStep = () => setStep(step + 1)
-  const prevStep = () => setStep(step - 1)
+  const nextStep = () => {
+    haptics.medium()
+    setStep(step + 1)
+  }
+  const prevStep = () => {
+    haptics.light()
+    setStep(step - 1)
+  }
 
   return (
-    <div className="max-w-xl mx-auto mt-12">
-      <div className="flex justify-between mb-12 relative px-4">
+    <div className="max-w-xl mx-auto mt-6 md:mt-12">
+      <div className="flex justify-between mb-8 md:mb-12 relative px-2 md:px-4">
         <div className="absolute top-4 left-0 right-0 h-[1px] bg-white/5 -z-10" />
         {[1, 2, 3, 4].map((s) => (
-          <div key={s} className="flex flex-col items-center gap-3">
+          <div key={s} className="flex flex-col items-center gap-2 md:gap-3">
             <motion.div 
               animate={{ 
                 scale: step === s ? 1.1 : 1,
                 borderColor: step >= s ? "rgba(59, 130, 246, 1)" : "rgba(255, 255, 255, 0.1)"
               }}
-              className={`w-10 h-10 rounded-xl flex items-center justify-center border-2 transition-all bg-[#050505] shadow-2xl ${
+              className={`w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl flex items-center justify-center border-2 transition-all bg-[#050505] shadow-2xl ${
                 step >= s ? "text-blue-400" : "text-white/20"
               }`}
             >
-              {step > s ? <Check className="w-5 h-5" /> : <span className="text-xs font-black">{s}</span>}
+              {step > s ? <Check className="w-4 h-4 md:w-5 md:h-5" /> : <span className="text-[10px] md:text-xs font-black">{s}</span>}
             </motion.div>
-            <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${
+            <span className={`text-[8px] md:text-[10px] font-black uppercase tracking-[0.1em] md:tracking-[0.2em] ${
               step >= s ? "text-blue-400" : "text-white/20"
             }`}>
               {s === 1 ? "Goal" : s === 2 ? "Options" : s === 3 ? "Limits" : "Weights"}
@@ -101,7 +109,7 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
         ))}
       </div>
 
-      <div className="glass-card min-h-[450px] flex flex-col justify-between">
+      <div className="glass-card min-h-[400px] md:min-h-[450px] flex flex-col justify-between p-4 md:p-6">
         <AnimatePresence mode="wait">
           <motion.div
             key={step}
@@ -112,11 +120,11 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
             className="flex-grow"
           >
             {step === 1 && (
-              <div className="space-y-6">
+              <div className="space-y-4 md:space-y-6">
                 <div>
-                  <label className="text-sm font-medium text-white/60 mb-2 block">Decision Domain</label>
+                  <label className="text-xs md:text-sm font-medium text-white/60 mb-2 block">Decision Domain</label>
                   <select 
-                  className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all appearance-none cursor-pointer"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl p-3 md:p-4 text-sm md:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all appearance-none cursor-pointer"
                   value={formData.domain}
                   onChange={(e) => {
                     const domain = e.target.value
@@ -152,9 +160,9 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
                 </select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-white/60 mb-2 block">Primary Goal</label>
+                  <label className="text-xs md:text-sm font-medium text-white/60 mb-2 block">Primary Goal</label>
                   <textarea 
-                    className="w-full glass-input h-32 resize-none"
+                    className="w-full glass-input h-24 md:h-32 resize-none text-sm"
                     placeholder="Describe your objective..."
                     value={formData.goal}
                     onChange={(e) => setFormData({...formData, goal: e.target.value})}
@@ -165,29 +173,29 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
 
             {step === 2 && (
               <div className="space-y-4">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-sm font-bold uppercase tracking-widest text-white/40">Decision Alternatives</h3>
-                  <button onClick={addOption} className="text-[10px] bg-blue-600/20 text-blue-400 px-3 py-1 rounded-full border border-blue-400/20 hover:bg-blue-600/40 transition-all">
+                <div className="flex justify-between items-center mb-2 md:mb-4">
+                  <h3 className="text-xs md:text-sm font-bold uppercase tracking-widest text-white/40">Alternatives</h3>
+                  <button onClick={addOption} className="text-[8px] md:text-[10px] bg-blue-600/20 text-blue-400 px-3 py-1.5 rounded-full border border-blue-400/20 hover:bg-blue-600/40 transition-all font-black uppercase">
                     + ADD OPTION
                   </button>
                 </div>
-                <div className="max-h-[300px] overflow-y-auto space-y-4 pr-2">
+                <div className="max-h-[250px] md:max-h-[300px] overflow-y-auto space-y-4 pr-1 md:pr-2">
                   {formData.options.map((opt, i) => (
-                    <div key={i} className="p-4 rounded-xl bg-white/5 border border-white/10 relative group">
+                    <div key={i} className="p-3 md:p-4 rounded-xl bg-white/5 border border-white/10 relative group">
                       <button 
                         onClick={() => removeOption(i)}
-                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500/20 text-red-400 rounded-full border border-red-500/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center text-xs"
+                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500/20 text-red-400 rounded-full border border-red-500/40 md:opacity-0 md:group-hover:opacity-100 transition-all flex items-center justify-center text-xs"
                       >
                         ×
                       </button>
                       <input 
-                        className="bg-transparent border-none text-white font-bold w-full mb-3 focus:outline-none"
+                        className="bg-transparent border-none text-white font-bold w-full mb-3 focus:outline-none text-sm"
                         value={opt.name}
                         onChange={(e) => updateOption(i, "name", e.target.value)}
                       />
-                      <div className="grid grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
                         <div>
-                          <p className="text-[10px] text-white/40 uppercase font-bold mb-1">Base Cost</p>
+                          <p className="text-[8px] md:text-[10px] text-white/40 uppercase font-bold mb-1">Base Cost</p>
                           <input 
                             type="number" className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-xs font-mono"
                             value={opt.parameters.base_cost}
@@ -195,7 +203,7 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
                           />
                         </div>
                         <div>
-                          <p className="text-[10px] text-white/40 uppercase font-bold mb-1">Risk (0-1)</p>
+                          <p className="text-[8px] md:text-[10px] text-white/40 uppercase font-bold mb-1">Risk (0-1)</p>
                           <input 
                             type="number" step="0.01" className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-xs font-mono"
                             value={opt.parameters.risk}
@@ -203,7 +211,7 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
                           />
                         </div>
                         <div>
-                          <p className="text-[10px] text-white/40 uppercase font-bold mb-1">Reliability</p>
+                          <p className="text-[8px] md:text-[10px] text-white/40 uppercase font-bold mb-1">Reliability</p>
                           <input 
                             type="number" step="0.001" className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-xs font-mono"
                             value={opt.parameters.availability}
@@ -218,14 +226,14 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
             )}
 
             {step === 3 && (
-              <div className="space-y-6">
-                <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/10">
-                  <div className="flex justify-between mb-4">
+              <div className="space-y-4 md:space-y-6">
+                <div className="p-3 md:p-4 rounded-xl bg-blue-500/5 border border-blue-500/10">
+                  <div className="flex justify-between mb-3 md:mb-4">
                     <div className="flex items-center gap-2 text-blue-400">
-                      <DollarSign className="w-4 h-4" />
-                      <span className="text-sm font-bold">Total Budget Ceiling</span>
+                      <IndianRupee className="w-3 h-3 md:w-4 md:h-4" />
+                      <span className="text-xs md:text-sm font-bold uppercase tracking-tight">Total Budget Ceiling</span>
                     </div>
-                    <span className="text-sm font-mono">${formData.constraints.max_cost}</span>
+                    <span className="text-[10px] md:text-sm font-mono">{new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(formData.constraints.max_cost)}</span>
                   </div>
                   <input 
                     type="range" min="5000" max="100000" step="1000"
@@ -238,13 +246,13 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
                   />
                 </div>
 
-                <div className="p-4 rounded-xl bg-purple-500/5 border border-purple-500/10">
-                  <div className="flex justify-between mb-4">
+                <div className="p-3 md:p-4 rounded-xl bg-purple-500/5 border border-purple-500/10">
+                  <div className="flex justify-between mb-3 md:mb-4">
                     <div className="flex items-center gap-2 text-purple-400">
-                      <Activity className="w-4 h-4" />
-                      <span className="text-sm font-bold">Minimum Availability</span>
+                      <Activity className="w-3 h-3 md:w-4 md:h-4" />
+                      <span className="text-xs md:text-sm font-bold uppercase tracking-tight">Min Availability</span>
                     </div>
-                    <span className="text-sm font-mono">{(formData.constraints.min_availability * 100).toFixed(2)}%</span>
+                    <span className="text-[10px] md:text-sm font-mono">{(formData.constraints.min_availability * 100).toFixed(2)}%</span>
                   </div>
                   <input 
                     type="range" min="0.8" max="0.9999" step="0.0001"
@@ -260,24 +268,24 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
             )}
 
             {step === 4 && (
-              <div className="space-y-4">
-                 <p className="text-sm text-white/60 mb-4">Engine weighting for the TOPSIS multicriteria optimization.</p>
+              <div className="space-y-3 md:space-y-4">
+                 <p className="text-[10px] md:text-sm text-white/60 mb-2 md:mb-4">Engine weighting for multicriteria optimization.</p>
                   {[
                     { id: "cost", label: "Cost Minimization", index: 0 },
                     { id: "reliability", label: "System Reliability", index: 1 },
                     { id: "risk", label: "Risk Tolerance", index: 2 }
                   ].map((item) => (
-                    <div key={item.id} className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
-                      <span className="text-sm font-medium">{item.label}</span>
-                      <div className="flex gap-2">
+                    <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 md:p-4 rounded-xl bg-white/5 border border-white/10 gap-3">
+                      <span className="text-xs md:text-sm font-medium">{item.label}</span>
+                      <div className="flex gap-1 md:gap-2">
                         {[1, 2, 3, 4, 5].map((lvl) => {
                           const currentVal = Math.round((formData.weights?.[item.index] || 0.33) * 5)
                           return (
                             <div 
                               key={lvl} 
                               onClick={() => updateWeight(item.index, lvl)}
-                              className={`w-6 h-6 rounded border flex items-center justify-center text-[10px] cursor-pointer transition-all ${
-                                lvl === currentVal ? "bg-blue-600/40 border-blue-400 text-white" : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
+                              className={`flex-1 sm:w-8 sm:h-8 h-10 rounded border flex items-center justify-center text-[10px] cursor-pointer transition-all ${
+                                lvl === currentVal ? "bg-blue-600/40 border-blue-400 text-white font-black" : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
                               }`}
                             >
                               {lvl}
@@ -292,27 +300,27 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
           </motion.div>
         </AnimatePresence>
 
-        <div className="flex justify-between pt-8 border-t border-white/10">
+        <div className="flex justify-between pt-6 md:pt-8 border-t border-white/10 gap-4 mt-4">
           <button 
             onClick={prevStep}
             disabled={step === 1}
-            className="px-4 py-2 flex items-center gap-2 text-sm text-white/40 hover:text-white disabled:opacity-0 transition-all font-bold"
+            className="flex-1 sm:flex-none px-4 py-2.5 flex items-center justify-center gap-2 text-xs text-white/40 hover:text-white disabled:opacity-0 transition-all font-black uppercase rounded-lg border border-transparent hover:border-white/10"
           >
             <ChevronLeft className="w-4 h-4" /> BACK
           </button>
           {step < 4 ? (
             <button 
               onClick={nextStep}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-black flex items-center gap-2 transition-all"
+              className="flex-1 sm:flex-none px-6 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-xs font-black flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-900/20 uppercase"
             >
-              CONTINUE <ChevronRight className="w-4 h-4" />
+              NEXT <ChevronRight className="w-4 h-4" />
             </button>
           ) : (
             <button 
               onClick={() => onAnalyze(formData)}
-              className="px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:scale-105 rounded-lg text-sm font-black shadow-lg shadow-blue-900/40 transition-all uppercase tracking-widest"
+              className="flex-1 sm:flex-none px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:shadow-blue-500/20 hover:scale-[1.02] rounded-lg text-xs font-black shadow-lg shadow-blue-900/40 transition-all uppercase tracking-widest"
             >
-              🚀 Analyze Real-World Data
+              🚀 Analyze Data
             </button>
           )}
         </div>

@@ -2,8 +2,10 @@
 
 import React, { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Upload, FileText, Check, AlertCircle, Loader2 } from "lucide-react"
+import { Upload, FileText, Check, AlertCircle, Loader2, Activity } from "lucide-react"
 import axios from "axios"
+import { API_BASE_URL } from "@/lib/api-config"
+import { useAuthStore } from "@/store/useAuthStore"
 
 interface VisionResult {
   option_name: string;
@@ -47,11 +49,16 @@ export function VisionPanel() {
     formData.append("file", file)
 
     try {
-      const res = await axios.post("http://127.0.0.1:8000/vision/extract", formData)
+      const token = useAuthStore.getState().token
+      const res = await axios.post(`${API_BASE_URL}/vision/extract`, formData, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
       setResult(res.data)
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to extract data. Ensure OCR engine is active."
-      setError(message)
+      const message = axios.isAxiosError(err) 
+        ? err.response?.data?.detail 
+        : err instanceof Error ? err.message : "Failed to extract data."
+      setError(message || "Failed to extract data.")
     } finally {
       setLoading(false)
     }
@@ -62,7 +69,7 @@ export function VisionPanel() {
       <div 
         onDragOver={handleDragOver}
         onDrop={handleDrop}
-        className={`glass-card !p-12 border-dashed border-2 flex flex-col items-center justify-center transition-all ${
+        className={`glass-card !p-6 md:!p-12 border-dashed border-2 flex flex-col items-center justify-center transition-all ${
           file ? "border-blue-500/50 bg-blue-500/5" : "border-white/10 hover:border-white/20"
         }`}
       >
@@ -72,9 +79,33 @@ export function VisionPanel() {
               <Upload className="w-8 h-8 text-blue-400" />
             </div>
             <h4 className="text-lg font-bold mb-2">Ingest Decision Data</h4>
-            <p className="text-sm text-white/40 text-center max-w-xs">
-              Drag & drop a screenshot of your vendor dashboard or cost report.
+            <p className="text-sm text-white/40 text-center max-w-xs mb-6">
+              Drag & drop a screenshot or use your mobile camera to scan reports.
             </p>
+            
+            <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
+              <label className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 cursor-pointer transition-all">
+                <Upload className="w-4 h-4" />
+                Upload
+                <input 
+                  type="file" 
+                  className="hidden" 
+                  accept="image/*"
+                  onChange={(e) => e.target.files?.[0] && setFile(e.target.files[0])}
+                />
+              </label>
+              <label className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600/20 border border-blue-500/30 rounded-xl text-[10px] font-black uppercase tracking-widest text-blue-400 hover:bg-blue-600/30 cursor-pointer transition-all">
+                <Activity className="w-4 h-4" />
+                Camera
+                <input 
+                  type="file" 
+                  className="hidden" 
+                  accept="image/*" 
+                  capture="environment"
+                  onChange={(e) => e.target.files?.[0] && setFile(e.target.files[0])}
+                />
+              </label>
+            </div>
           </>
         ) : (
           <div className="flex flex-col items-center">
@@ -87,7 +118,7 @@ export function VisionPanel() {
             {!result && !loading && (
               <button 
                 onClick={handleUpload}
-                className="mt-6 px-6 py-2 bg-blue-600 rounded-lg text-xs font-bold hover:bg-blue-500 transition-all uppercase tracking-widest"
+                className="mt-6 w-full md:w-auto px-6 py-2 bg-blue-600 rounded-lg text-xs font-bold hover:bg-blue-500 transition-all uppercase tracking-widest"
               >
                 Process with OCR
               </button>

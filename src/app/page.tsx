@@ -12,39 +12,14 @@ import {
 import axios from "axios"
 import { ResultDashboard } from "@/components/ResultDashboard"
 import { VisionPanel } from "@/components/VisionPanel"
+import { API_BASE_URL } from "@/lib/api-config"
 import { useAuthStore } from "@/store/useAuthStore"
 import { useDecisionStore } from "@/store/useDecisionStore"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Toast, ToastType } from "@/components/Toast"
+import { Skeleton } from "@/components/Skeleton"
 
-interface DecisionResults {
-  id: number;
-  strategy: string;
-  domain: string;
-  ranked_options: {
-    option: string;
-    topsis_score: number;
-    metrics: {
-      cost: number;
-      availability: number;
-      risk: number;
-    };
-  }[];
-  simulations: {
-    option: string;
-    simulation: {
-      cost_dist: number[];
-      availability_dist: number[];
-      risk_dist: number[];
-      expected: {
-        cost: number;
-        availability: number;
-        risk: number;
-      };
-    };
-  }[];
-  disclaimer: string;
-}
+// DecisionResults interface moved to store for consistency
 
 export default function Home() {
   const { isLoggedIn, hasHydrated: authHydrated } = useAuthStore()
@@ -58,7 +33,12 @@ export default function Home() {
   
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [stats, setStats] = useState<any>(null)
+  const [stats, setStats] = useState<{
+    total_audits: number;
+    avg_score: number;
+    most_active_domain: string;
+    recent_activity: Array<{ id: number; goal: string; timestamp: string }>;
+  } | null>(null)
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null)
 
   const showToast = (message: string, type: ToastType = 'info') => {
@@ -67,7 +47,10 @@ export default function Home() {
 
   const fetchStats = async () => {
     try {
-      const res = await axios.get("http://localhost:8001/decision/stats")
+      const token = useAuthStore.getState().token
+      const res = await axios.get(`${API_BASE_URL}/decision/stats`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
       setStats(res.data)
     } catch (err) {
       console.error("Failed to fetch stats", err)
@@ -80,6 +63,17 @@ export default function Home() {
     }
   }, [authHydrated, isLoggedIn, view])
 
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    if (authHydrated && isLoggedIn) {
+      const viewParam = searchParams.get('view')
+      if (viewParam === 'stepper' || viewParam === 'results' || viewParam === 'hero' || viewParam === 'settings') {
+        setView(viewParam as 'hero' | 'stepper' | 'results' | 'settings')
+      }
+    }
+  }, [authHydrated, isLoggedIn, searchParams, setView])
+
   useEffect(() => {
     if (authHydrated && !isLoggedIn) {
       router.push("/login")
@@ -91,7 +85,14 @@ export default function Home() {
   const handleAnalyze = async (formData: DecisionData) => {
     setLoading(true)
     try {
-      const response = await axios.post("http://localhost:8001/decision/recommend", formData)
+      const token = useAuthStore.getState().token
+      const response = await axios.post(`${API_BASE_URL}/decision/recommend`, {
+        ...formData,
+        iterations: useDecisionStore.getState().guardrails.iterations,
+        seed: 42 // Enterprise default
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
       setResults(response.data)
       setView("results")
       showToast("Simulation Analysis Complete", "success")
@@ -104,12 +105,12 @@ export default function Home() {
   }
 
   const exportPDF = (id: number | string) => {
-    window.open(`http://localhost:8001/decision/export/${id}`, '_blank')
+    window.open(`${API_BASE_URL}/decision/export/${id}`, '_blank')
     showToast("Executive Report generated", "info")
   }
 
   return (
-    <main className="min-h-screen pt-24 pb-12 px-8 overflow-hidden">
+    <main className="min-h-screen pt-24 pb-12 px-4 md:px-8 overflow-hidden">
       <Navbar />
 
       <AnimatePresence mode="wait">
@@ -144,11 +145,11 @@ export default function Home() {
                   <Zap className="w-3 h-3" />
                   ULTIMATE TIER ACTIVATED
                 </div>
-                <h1 className="text-6xl md:text-7xl font-extrabold tracking-tight mb-6 leading-[1.1]">
+                <h1 className="text-4xl md:text-7xl font-extrabold tracking-tight mb-6 leading-[1.1]">
                   Command <br />
                   <span className="text-blue-500">Center.</span>
                 </h1>
-                <p className="text-xl text-white/60 mb-8 max-w-lg leading-relaxed">
+                <p className="text-base md:text-xl text-white/60 mb-8 max-w-lg leading-relaxed">
                   Welcome back to the Intelligence Hub. Your strategic operations are synchronized and ready for analysis.
                 </p>
                 
@@ -173,24 +174,36 @@ export default function Home() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                {[
-                  { label: "Total Audits", value: stats?.total_audits || 0, icon: History, color: "blue" },
-                  { label: "Avg TOPSIS Score", value: `${stats?.avg_score || 0}%`, icon: TrendingUp, color: "green" },
-                  { label: "Active Domain", value: stats?.most_active_domain || "N/A", icon: Users, color: "purple" },
-                  { label: "Neural Clarity", value: "98.4%", icon: BarChart3, color: "orange" }
-                ].map((stat, i) => (
-                  <motion.div 
-                    key={stat.label}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.1 }}
-                    className="glass-card !p-6 border-white/5 hover:border-blue-500/30 transition-all group"
-                  >
-                    <stat.icon className={`w-8 h-8 text-${stat.color}-400 mb-4`} />
-                    <p className="text-[10px] font-black uppercase tracking-widest text-white/20 mb-1">{stat.label}</p>
-                    <p className="text-2xl font-black italic">{stat.value}</p>
-                  </motion.div>
-                ))}
+                {!stats ? (
+                  [1, 2, 3, 4].map(i => (
+                    <div key={i} className="glass-card !p-6 border-white/5 space-y-4">
+                      <Skeleton width="32px" height="32px" borderRadius="8px" />
+                      <div className="space-y-2">
+                        <Skeleton width="40%" height="10px" />
+                        <Skeleton width="70%" height="24px" />
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  [
+                    { label: "Total Audits", value: stats?.total_audits || 0, icon: History, color: "blue" },
+                    { label: "Avg TOPSIS Score", value: `${stats?.avg_score || 0}%`, icon: TrendingUp, color: "green" },
+                    { label: "Active Domain", value: stats?.most_active_domain || "N/A", icon: Users, color: "purple" },
+                    { label: "Neural Clarity", value: "98.4%", icon: BarChart3, color: "orange" }
+                  ].map((stat, i) => (
+                    <motion.div 
+                      key={stat.label}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.1 }}
+                      className="glass-card !p-6 border-white/5 hover:border-blue-500/30 transition-all group"
+                    >
+                      <stat.icon className={`w-8 h-8 text-${stat.color}-400 mb-4`} />
+                      <p className="text-[10px] font-black uppercase tracking-widest text-white/20 mb-1">{stat.label}</p>
+                      <p className="text-2xl font-black italic">{stat.value}</p>
+                    </motion.div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -198,8 +211,18 @@ export default function Home() {
               <div className="lg:col-span-2 space-y-6">
                 <h2 className="text-xl font-black uppercase tracking-tighter italic">Recent Strategic Activity</h2>
                 <div className="space-y-4">
-                  {stats?.recent_activity?.length > 0 ? (
-                    stats.recent_activity.map((activity: any) => (
+                  {!stats ? (
+                    [1, 2, 3].map(i => (
+                      <div key={i} className="p-4 rounded-xl bg-white/5 border border-white/10 flex items-center gap-4">
+                        <Skeleton width="32px" height="32px" borderRadius="8px" />
+                        <div className="space-y-2 flex-grow">
+                           <Skeleton width="40%" height="14px" />
+                           <Skeleton width="20%" height="10px" />
+                        </div>
+                      </div>
+                    ))
+                  ) : stats.recent_activity.length > 0 ? (
+                    stats.recent_activity.map((activity) => (
                       <div 
                         key={activity.id}
                         className="p-4 rounded-xl bg-white/5 border border-white/10 flex items-center justify-between group hover:bg-white/10 transition-all cursor-pointer"
@@ -220,6 +243,12 @@ export default function Home() {
                   ) : (
                     <div className="p-12 text-center glass-card border-dashed border-white/5">
                       <p className="text-white/20 text-sm font-bold italic">No recent activity detected in the grid.</p>
+                      <button 
+                        onClick={() => setView("stepper")}
+                        className="mt-4 text-[10px] font-black uppercase tracking-widest text-blue-400"
+                      >
+                        Initialize First Simulation
+                      </button>
                     </div>
                   )}
                 </div>
@@ -293,7 +322,7 @@ export default function Home() {
               </div>
             <div className="flex items-center gap-4">
                <button 
-                onClick={() => exportPDF((results as any)?.id || 'latest')} 
+                onClick={() => exportPDF(results?.id || 'latest')} 
                 className="px-6 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-sm font-bold flex items-center gap-2"
               >
                 <Download className="w-4 h-4" /> Export PDF

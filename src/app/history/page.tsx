@@ -7,22 +7,54 @@ import axios from "axios"
 import { useAuthStore } from "@/store/useAuthStore"
 import { useDecisionStore } from "@/store/useDecisionStore"
 import { useRouter } from "next/navigation"
-import { Calendar, Tag, Target, ChevronRight, Search, Filter, Activity, Play, Download } from "lucide-react"
+import { API_BASE_URL } from "@/lib/api-config"
+import { Calendar, Tag, Target, Search, Filter, Play, Download, Trash2, Edit3, FileSpreadsheet, Copy, ArrowRight } from "lucide-react"
+import { Skeleton } from "@/components/Skeleton"
 import { Toast, ToastType } from "@/components/Toast"
+import { DecisionData } from "@/components/DecisionStepper"
+import { DecisionResults } from "@/store/useDecisionStore"
 
 interface AuditItem {
   id: number
   timestamp: string
   goal: string
   domain: string
+  project_name?: string
   recommended_option: string
   score: number
-  constraints?: Record<string, number | string>
+  constraints?: {
+    max_cost: number;
+    min_availability: number;
+  }
   preferences?: string[]
   strategy?: string
-  simulation_results?: Array<{ option: string; score: number }>
-  options?: Array<{ name: string; parameters: Record<string, number> }>
+  simulation_results?: Array<{ 
+    option: string; 
+    score: number;
+    metrics: {
+      cost: number;
+      availability: number;
+      risk: number;
+    };
+    simulation: {
+      cost_dist: number[];
+      availability_dist: number[];
+      risk_dist: number[];
+      expected: {
+        cost: number;
+        availability: number;
+        risk: number;
+      };
+    };
+  }>
+  options?: Array<{ name: string; parameters: { base_cost: number; risk: number; availability: number } }>
   weights?: number[]
+  sensitivity?: {
+    stability_index: number;
+    margin: number;
+    is_robust: boolean;
+    critical_vectors: string[];
+  }
 }
 
 export default function AuditHistory() {
@@ -33,13 +65,21 @@ export default function AuditHistory() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [filterDomain, setFilterDomain] = useState<string | null>(null)
+  const [selectedProject, setSelectedProject] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [isComparing, setIsComparing] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null)
+  const [showBackToTop, setShowBackToTop] = useState(false)
 
   const showToast = (message: string, type: ToastType = 'info') => {
     setToast({ message, type })
   }
+
+  useEffect(() => {
+    const handleScroll = () => setShowBackToTop(window.scrollY > 400)
+    window.addEventListener("scroll", handleScroll)
+    return () => window.removeEventListener("scroll", handleScroll)
+  }, [])
 
   useEffect(() => {
     if (authHydrated && !isLoggedIn) {
@@ -49,32 +89,34 @@ export default function AuditHistory() {
 
   const restoreActivity = (audit: AuditItem) => {
     // 1. Reconstruct DecisionData
-    const decisionData = {
+    const decisionData: DecisionData = {
       domain: audit.domain,
       goal: audit.goal,
-      constraints: (audit.constraints as any) || { max_cost: 50000, min_availability: 0.95 },
+      constraints: audit.constraints || { max_cost: 50000, min_availability: 0.95 },
       preferences: audit.preferences || ["cost", "reliability"],
       options: audit.options || [],
       weights: audit.weights || [0.4, 0.4, 0.2]
     }
 
-    setFormData(decisionData as any)
+    setFormData(decisionData)
     
     // 2. Load results if they exist (formatted for store)
     if (audit.simulation_results) {
-       // Mock the distribution data since we don't save raw distributions in the DB yet
-       // but we want the UI to feel "restored"
        setResults({
          strategy: audit.strategy || "TOPSIS",
          domain: audit.domain,
          ranked_options: audit.simulation_results.map(r => ({
            option: r.option,
            topsis_score: r.score,
-           metrics: { cost: 0, availability: 0, risk: 0 }
+           metrics: r.metrics
          })),
-         simulations: [],
-         disclaimer: "Restored from Audit Archive."
-       } as any)
+         simulations: audit.simulation_results.map(r => ({
+           option: r.option,
+           simulation: r.simulation
+         })),
+         sensitivity: audit.sensitivity,
+         disclaimer: "Enterprise Intelligence Core. Restored from Historical Archives."
+       } as DecisionResults)
        setView("results")
     } else {
        setView("stepper")
@@ -84,9 +126,68 @@ export default function AuditHistory() {
     setTimeout(() => router.push("/"), 500)
   }
 
+  const forkScenario = (audit: AuditItem) => {
+    // Forking is like restoring but we clear the results to force a new simulation
+    const decisionData: DecisionData = {
+      domain: audit.domain,
+      goal: `${audit.goal} (Forked)`,
+      constraints: audit.constraints || { max_cost: 50000, min_availability: 0.95 },
+      preferences: audit.preferences || ["cost", "reliability"],
+      options: audit.options || [],
+      weights: audit.weights || [0.4, 0.4, 0.2]
+    }
+
+    setFormData(decisionData)
+    setResults(null)
+    setView("stepper")
+    
+    showToast("Scenario Forked: Parameters Loaded", "info")
+    setTimeout(() => router.push("/"), 500)
+  }
+
+  const deleteAudit = async (e: React.MouseEvent, id: number) => {
+    e.stopPropagation()
+    if (!confirm("Are you sure you want to purge this audit from the station archives?")) return
+    
+    try {
+      const token = useAuthStore.getState().token
+      await axios.delete(`${API_BASE_URL}/decision/audit/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setAudits(prev => prev.filter(a => a.id !== id))
+      showToast("Audit Purged Successfully", "success")
+    } catch (err) {
+      console.error("Delete failed", err)
+      showToast("Purge Protocol Failed", "error")
+    }
+  }
+
+  const renameAudit = async (id: number, currentGoal: string) => {
+    const newGoal = prompt("Enter new goal description:", currentGoal)
+    if (!newGoal || newGoal === currentGoal) return
+
+    try {
+      const token = useAuthStore.getState().token
+      await axios.patch(`${API_BASE_URL}/decision/audit/${id}`, { goal: newGoal }, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setAudits(prev => prev.map(a => a.id === id ? { ...a, goal: newGoal } : a))
+      showToast("Metadata Synchronized", "success")
+    } catch (err) {
+      console.error("Rename failed", err)
+      showToast("Sync Failed", "error")
+    }
+  }
+
+  const exportCSV = (e: React.MouseEvent, id: number | string) => {
+    e.stopPropagation()
+    window.open(`${API_BASE_URL}/decision/export/csv/${id}`, '_blank')
+    showToast("Raw Data Exported (CSV)", "info")
+  }
+
   const exportPDF = (e: React.MouseEvent, id: number | string) => {
     e.stopPropagation()
-    window.open(`http://localhost:8001/decision/export/${id}`, '_blank')
+    window.open(`${API_BASE_URL}/decision/export/${id}`, '_blank')
     showToast("Executive Report generated", "info")
   }
 
@@ -94,7 +195,10 @@ export default function AuditHistory() {
     if (!isLoggedIn || !authHydrated || !decisionHydrated) return
     const fetchHistory = async () => {
       try {
-        const res = await axios.get("http://localhost:8001/decision/history")
+        const token = useAuthStore.getState().token
+        const res = await axios.get(`${API_BASE_URL}/decision/history`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
         setAudits(res.data)
       } catch (err) {
         console.error("Failed to fetch history", err)
@@ -111,8 +215,11 @@ export default function AuditHistory() {
     const matchesSearch = item.goal.toLowerCase().includes(search.toLowerCase()) || 
                           item.recommended_option.toLowerCase().includes(search.toLowerCase())
     const matchesFilter = !filterDomain || item.domain === filterDomain
-    return matchesSearch && matchesFilter
+    const matchesProject = !selectedProject || (item.project_name || "General") === selectedProject
+    return matchesSearch && matchesFilter && matchesProject
   })
+
+  const uniqueProjects = Array.from(new Set(audits.map(a => a.project_name || "General")))
 
   const domains = Array.from(new Set(audits.map((a: AuditItem) => a.domain)))
 
@@ -126,36 +233,74 @@ export default function AuditHistory() {
   const selectedAudits = audits.filter(a => selectedIds.includes(a.id))
 
   return (
-    <main className="min-h-screen pt-24 pb-12 px-8 overflow-hidden">
+    <div className="min-h-screen bg-[#050505] selection:bg-blue-500/30">
       <Navbar />
       
-      <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-6">
-          <div>
-            <h1 className="text-4xl font-black uppercase tracking-tighter italic">Audit Archive</h1>
-            <p className="text-white/40">Traceability and historical performance logs</p>
+      <main className="container mx-auto px-4 pt-24 md:pt-32 flex flex-col lg:flex-row gap-8 pb-20">
+        {/* Workspace Sidebar */}
+        <div className="hidden lg:block w-64 shrink-0 space-y-8 sticky top-32 self-start h-[calc(100vh-8rem)]">
+             <div>
+                <h3 className="text-xs font-black text-white/40 uppercase tracking-widest mb-6 px-2">Workspaces</h3>
+                <div className="space-y-1">
+                   <button 
+                     onClick={() => setSelectedProject(null)}
+                     className={`w-full text-left px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-between ${!selectedProject ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" : "text-white/40 hover:bg-white/5 hover:text-white"}`}
+                   >
+                     <span>All Projects</span>
+                     <span className="opacity-60">{audits.length}</span>
+                   </button>
+                   {uniqueProjects.map(p => (
+                     <button 
+                       key={p}
+                       onClick={() => setSelectedProject(p)}
+                       className={`w-full text-left px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-between ${selectedProject === p ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" : "text-white/40 hover:bg-white/5 hover:text-white"}`}
+                     >
+                       <span>{p}</span>
+                       <span className="opacity-60">{audits.filter(a => (a.project_name || "General") === p).length}</span>
+                     </button>
+                   ))}
+                </div>
+             </div>
+
+             <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-white/5 relative overflow-hidden">
+                <div className="absolute inset-0 bg-grid-pattern opacity-10" />
+                <div className="relative z-10">
+                   <h4 className="text-white font-bold text-sm mb-1">Enterprise Tier</h4>
+                   <p className="text-[10px] text-white/60 mb-3">Unlimited workspaces enabled.</p>
+                   <button className="w-full py-2 rounded-lg bg-white/10 hover:bg-white/20 text-[10px] font-black uppercase tracking-widest text-white transition-colors">
+                      Manage Team
+                   </button>
+                </div>
+             </div>
+        </div>
+
+        <div className="flex-1 min-w-0">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 md:mb-12 gap-6">
+          <div className="md:border-l-4 md:border-blue-600 md:pl-6">
+            <h1 className="text-2xl md:text-4xl font-black uppercase tracking-tighter italic">Audit Archive</h1>
+            <p className="text-[10px] md:text-sm text-white/40 uppercase font-bold tracking-widest mt-1 italic">Historical Intelligence Registry</p>
           </div>
 
-          <div className="flex gap-4 w-full md:w-auto">
+          <div className="flex gap-3 w-full md:w-auto">
              <div className="relative flex-grow md:w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 md:w-4 md:h-4 text-white/20" />
                 <input 
-                  className="w-full glass-input pl-10 h-10 text-xs font-bold uppercase tracking-widest" 
-                  placeholder="Search goals..." 
+                  className="w-full glass-input pl-10 h-10 md:h-12 text-[10px] md:text-xs font-black uppercase tracking-widest" 
+                  placeholder="Filter targets..." 
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
              </div>
-             <div className="relative group">
-                <button className="glass-card !p-0 h-10 w-10 flex items-center justify-center hover:bg-blue-500/10 border-white/10">
+             <div className="relative group/filter">
+                <button className="glass-card !p-0 h-10 md:h-12 w-10 md:w-12 flex items-center justify-center hover:bg-blue-500/10 border-white/10 transition-all">
                    <Filter className="w-4 h-4 text-white/40" />
                 </button>
-                <div className="absolute right-0 top-full mt-2 w-48 glass-card !p-2 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all z-20">
+                <div className="absolute right-0 top-full mt-2 w-48 glass-card !p-2 opacity-0 group-hover/filter:opacity-100 pointer-events-none group-hover/filter:pointer-events-auto transition-all z-20">
                    <button 
                     onClick={() => setFilterDomain(null)}
                     className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-white/5 ${!filterDomain ? 'text-blue-400' : 'text-white/40'}`}
                    >
-                     All Domains
+                     System-wide
                    </button>
                    {domains.map((d: string) => (
                      <button 
@@ -173,67 +318,119 @@ export default function AuditHistory() {
 
         {loading ? (
           <div className="grid gap-4">
-            {[1,2,3].map(i => <div key={i} className="h-24 glass-card animate-pulse" />)}
-          </div>
-        ) : isComparing ? (
-          <div className="grid md:grid-cols-2 gap-8">
-            <button 
-              onClick={() => setIsComparing(false)}
-              className="col-span-2 text-xs font-bold uppercase tracking-widest text-blue-400 mb-4 hover:underline"
-            >
-              ← Back to archive
-            </button>
-            {selectedAudits.map(audit => (
-              <div key={audit.id} className="glass-card !bg-white/5 border-white/10">
-                <div className="flex items-center gap-4 mb-8">
-                  <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400">
-                    <Target className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-white/90">{audit.goal}</h3>
-                    <p className="text-[10px] text-white/40 uppercase font-black">{audit.domain}</p>
+            {[1, 2, 3, 4, 5].map(i => (
+              <div key={i} className="glass-card p-6 flex flex-col md:flex-row justify-between gap-6">
+                <div className="flex items-center gap-6 flex-grow">
+                  <Skeleton width="48px" height="48px" borderRadius="12px" />
+                  <div className="space-y-2 flex-grow max-w-md">
+                    <Skeleton width="60%" height="20px" />
+                    <div className="flex gap-2">
+                       <Skeleton width="80px" height="16px" />
+                       <Skeleton width="100px" height="16px" />
+                    </div>
                   </div>
                 </div>
-
-                <div className="space-y-6">
-                  <div className="p-4 rounded-xl bg-black/20 border border-white/5">
-                    <p className="text-[10px] text-white/40 uppercase font-black mb-3 italic">Optimization Outcome</p>
-                    <div className="flex justify-between items-end">
-                       <div>
-                         <p className="text-[10px] text-blue-400 font-bold uppercase mb-1">Top Recommendation</p>
-                         <p className="text-xl font-black">{audit.recommended_option}</p>
-                       </div>
-                       <div className="text-right">
-                         <p className="text-[10px] text-white/40 font-bold uppercase mb-1">Score</p>
-                         <p className="text-2xl font-black font-mono">{(audit.score * 100).toFixed(1)}%</p>
-                       </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="glass-card !bg-white/[0.02] border-white/5 !p-4">
-                      <p className="text-[10px] text-white/40 font-black uppercase mb-4">Core Constraints</p>
-                      <div className="space-y-2">
-                        {Object.entries(audit.constraints || {}).map(([key, val]) => (
-                          <div key={key} className="flex justify-between text-[10px]">
-                            <span className="text-white/40 opacity-70">{key}</span>
-                            <span className="font-mono font-bold">{String(val)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="glass-card !bg-white/[0.02] border-white/5 !p-4">
-                      <p className="text-[10px] text-white/40 font-black uppercase mb-4">MCDA Strategy</p>
-                      <div className="flex items-center gap-2">
-                         <div className="w-2 h-2 rounded-full bg-blue-500" />
-                         <span className="text-xs font-bold">{audit.strategy || "TOPSIS"}</span>
-                      </div>
-                      <p className="text-[10px] text-white/20 mt-2 italic leading-tight">Engine: v4.8 Strategic Tier</p>
-                    </div>
-                  </div>
+                <div className="flex items-center gap-4">
+                  <Skeleton width="120px" height="40px" borderRadius="12px" />
+                  <Skeleton width="120px" height="40px" borderRadius="12px" />
                 </div>
               </div>
             ))}
+          </div>
+        ) : filteredAudits.length === 0 ? (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="py-20 flex flex-col items-center justify-center text-center space-y-6 glass-card border-dashed border-white/5"
+          >
+            <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center">
+              <Search className="w-10 h-10 text-white/10" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-xl font-bold italic uppercase tracking-widest text-white/60">No Intelligence Found</h3>
+              <p className="text-sm text-white/20 max-w-xs mx-auto">
+                No archived audits match your current filter or search criteria.
+              </p>
+            </div>
+            {search && (
+              <button 
+                onClick={() => setSearch("")}
+                className="text-[10px] font-black uppercase tracking-widest text-blue-400 hover:text-blue-300 transition-colors"
+              >
+                Clear Research Filters
+              </button>
+            )}
+          </motion.div>
+        ) : isComparing ? (
+          <div className="flex flex-col gap-6 md:gap-8">
+            <button 
+              onClick={() => setIsComparing(false)}
+              className="w-fit text-[10px] font-black uppercase tracking-widest text-blue-400 mb-2 hover:bg-blue-500/10 px-4 py-2 rounded-lg transition-all"
+            >
+              ← System Archive
+            </button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+              {selectedAudits.map(audit => (
+                <div key={audit.id} className="glass-card !bg-white/5 border-white/10 hover:border-blue-500/30 transition-all">
+                  <div className="flex items-center gap-4 mb-6 md:mb-8">
+                    <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 shadow-lg shadow-blue-900/20">
+                      <Target className="w-5 h-5" />
+                    </div>
+                    <div className="flex-grow">
+                      <div className="flex items-center justify-between mb-1">
+                        <h3 className="font-bold text-white/90 line-clamp-1 italic">{audit.goal}</h3>
+                        <button onClick={() => renameAudit(audit.id, audit.goal)} className="text-white/20 hover:text-white/60 p-1">
+                          <Edit3 className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-white/40 uppercase font-black tracking-widest">{audit.domain}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div className="p-4 rounded-xl bg-black/40 border border-white/5">
+                      <div className="flex justify-between items-end">
+                        <div>
+                          <p className="text-[8px] md:text-[10px] text-blue-400 font-black uppercase mb-2 tracking-widest">Recommended Variant</p>
+                          <p className="text-base md:text-xl font-black uppercase italic tracking-tighter">{audit.recommended_option}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[8px] md:text-[10px] text-white/40 font-black uppercase mb-1">Confidence</p>
+                          <p className="text-xl md:text-2xl font-black font-mono text-white">{(audit.score * 100).toFixed(1)}%</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="glass-card !bg-white/[0.02] border-white/5 !p-4">
+                        <p className="text-[8px] md:text-[10px] text-white/40 font-black uppercase mb-4 tracking-widest">Environmental Specs</p>
+                        <div className="space-y-2">
+                          {Object.entries(audit.constraints || {}).map(([key, val]) => (
+                            <div key={key} className="flex justify-between text-[10px]">
+                              <span className="text-white/40 font-bold uppercase">{key.replace('_', ' ')}</span>
+                              <span className="font-mono font-black text-white/60">
+                                {key.includes('cost') ? 
+                                  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Number(val)) : 
+                                  String(val)
+                                }
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="glass-card !bg-white/[0.02] border-white/5 !p-4 flex flex-col justify-center">
+                        <p className="text-[8px] md:text-[10px] text-white/40 font-black uppercase mb-3 tracking-widest">Engine Protocol</p>
+                        <div className="flex items-center gap-2 mb-2">
+                           <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                           <span className="text-xs font-black italic">{audit.strategy || "TOPSIS v4.8"}</span>
+                        </div>
+                        <p className="text-[10px] text-white/20 font-medium italic">Deterministic cross-entropy verification active.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         ) : (
           <div className="grid gap-4">
@@ -243,65 +440,94 @@ export default function AuditHistory() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 onClick={() => setSelectedIds(prev => prev.includes(item.id) ? prev.filter(i => i !== item.id) : [...prev, item.id].slice(-2))}
-                className={`glass-card group hover:scale-[1.01] transition-all cursor-pointer border-l-4 ${
-                  selectedIds.includes(item.id) ? "border-l-blue-500 bg-blue-500/5 ring-1 ring-blue-500/20" : "border-l-blue-500/40"
+                className={`glass-card p-4 md:p-6 group hover:translate-x-1 transition-all cursor-pointer border-l-4 ${
+                  selectedIds.includes(item.id) ? "border-l-blue-600 bg-blue-600/5 ring-1 ring-blue-500/20" : "border-l-white/10 hover:border-l-blue-600/50"
                 }`}
               >
-                <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-                  <div className="flex items-center gap-6 w-full md:w-1/2">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                  <div className="flex items-center gap-4 md:gap-6 flex-grow min-w-0">
                     <div 
                       onClick={(e) => toggleSelection(e, item.id)}
-                      className={`w-6 h-6 rounded border flex items-center justify-center transition-all ${
+                      className={`hidden sm:flex w-6 h-6 rounded border items-center justify-center transition-all flex-shrink-0 ${
                         selectedIds.includes(item.id) ? "bg-blue-600 border-blue-400" : "bg-white/5 border-white/10 group-hover:border-white/20"
                       }`}
                     >
                        {selectedIds.includes(item.id) && <div className="w-2.5 h-2.5 bg-white rounded-sm" />}
                     </div>
-                    <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400">
+                    <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 shadow-lg shadow-blue-500/10 flex-shrink-0">
                       <Target className="w-5 h-5" />
                     </div>
-                    <div>
-                      <h3 className="font-bold text-white/90 line-clamp-1">{item.goal}</h3>
-                      <div className="flex items-center gap-4 mt-1">
-                        <span className="text-[10px] uppercase font-bold text-white/40 flex items-center gap-1">
-                          <Tag className="w-3 h-3" /> {item.domain}
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-white/90 text-sm md:text-base mb-1 truncate italic tracking-tight">{item.goal}</h3>
+                      <div className="flex flex-wrap items-center gap-3 md:gap-4">
+                        <span className="text-[8px] md:text-[10px] uppercase font-black text-white/40 flex items-center gap-1.5 bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                          <Tag className="w-3 h-3 text-blue-400/60" /> {item.domain}
                         </span>
-                        <span className="text-[10px] uppercase font-bold text-white/40 flex items-center gap-1">
-                          <Calendar className="w-3 h-3" /> {new Date(item.timestamp).toLocaleDateString()}
+                        <span className="text-[8px] md:text-[10px] uppercase font-black text-white/40 flex items-center gap-1.5 bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                          <Calendar className="w-3 h-3 text-purple-400/60" /> {new Date(item.timestamp).toLocaleDateString()}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-12 w-full md:w-auto justify-between md:justify-end">
-                    <div className="text-right">
-                      <p className="text-[10px] uppercase font-bold text-white/40 mb-1">Recommendation</p>
-                      <p className="font-bold text-blue-400 uppercase tracking-wider">{item.recommended_option}</p>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 md:gap-12 w-full md:w-auto">
+                    <div className="flex justify-between w-full sm:w-auto gap-8 border-t border-white/5 sm:border-t-0 pt-4 sm:pt-0">
+                      <div className="text-left sm:text-right">
+                        <p className="text-[8px] md:text-[10px] uppercase font-black text-white/20 mb-1 tracking-widest">Winning Variant</p>
+                        <p className="font-black text-blue-400 uppercase tracking-tighter italic text-xs md:text-sm">{item.recommended_option}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[8px] md:text-[10px] uppercase font-black text-white/20 mb-1 tracking-widest">Score</p>
+                        <p className="font-mono text-base md:text-xl font-black text-white">{(item.score * 100).toFixed(1)}%</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-[10px] uppercase font-bold text-white/40 mb-1">Score</p>
-                      <p className="font-mono text-xl font-black">{(item.score * 100).toFixed(1)}%</p>
-                    </div>
-                    <div className="flex gap-2">
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                       <button 
                         onClick={(e) => exportPDF(e, item.id)}
-                        className="p-3 rounded-xl bg-white/5 text-white/40 border border-white/10 hover:bg-white/10 transition-all flex items-center justify-center"
-                        title="Download Report"
+                        className="hidden lg:flex w-10 h-10 rounded-xl bg-white/5 text-white/20 border border-white/10 hover:bg-white/10 hover:text-white transition-all items-center justify-center p-0"
+                        title="Download PDF"
                       >
                         <Download className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={(e) => exportCSV(e, item.id)}
+                        className="w-10 h-10 rounded-xl bg-white/5 text-white/20 border border-white/10 hover:bg-green-500/10 hover:text-green-400 transition-all flex items-center justify-center p-0"
+                        title="Export CSV"
+                      >
+                        <FileSpreadsheet className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={(e) => deleteAudit(e, item.id)}
+                        className="w-10 h-10 rounded-xl bg-white/5 text-white/20 border border-white/10 hover:bg-red-500/10 hover:text-red-400 transition-all flex items-center justify-center p-0"
+                        title="Purge"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                      
+                      <div className="h-4 w-[1px] bg-white/10 mx-2 hidden sm:block" />
+
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          forkScenario(item)
+                        }}
+                        className="flex-grow sm:flex-none px-4 py-2.5 rounded-xl bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/30 transition-all flex items-center justify-center gap-2"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span className="text-[10px] font-black uppercase tracking-widest">Fork</span>
                       </button>
                       <button 
                         onClick={(e) => {
                           e.stopPropagation()
                           restoreActivity(item)
                         }}
-                        className="p-3 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600 transition-all flex items-center gap-2 group/btn"
+                        className="flex-grow sm:flex-none px-4 py-2.5 rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-2"
                       >
-                        <Play className="w-4 h-4 fill-current group-hover/btn:translate-x-0.5 transition-transform" />
-                        <span className="text-[10px] font-black uppercase tracking-widest hidden md:block">Restore Session</span>
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-white">Restore</span>
                       </button>
                     </div>
-                    <ChevronRight className="w-5 h-5 text-white/20 group-hover:text-white transition-colors" />
                   </div>
                 </div>
               </motion.div>
@@ -313,23 +539,34 @@ export default function AuditHistory() {
           <motion.div 
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
-            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 px-8 py-4 glass-card bg-blue-600/90 border-blue-400 shadow-2xl flex items-center gap-8 backdrop-blur-xl"
+            className="fixed bottom-4 md:bottom-8 left-4 md:left-1/2 right-4 md:right-auto md:-translate-x-1/2 z-50 p-4 md:p-6 glass-card bg-blue-600/95 border-blue-400 shadow-2xl flex flex-col sm:flex-row items-center gap-4 md:gap-8 backdrop-blur-2xl ring-2 ring-blue-400/50"
           >
             <div className="flex gap-2">
-               <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center font-black">1</div>
-               <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center font-black">2</div>
+               <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-white/10 flex items-center justify-center font-black text-xs md:text-base border border-white/20">1</div>
+               <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-white/10 flex items-center justify-center font-black text-xs md:text-base border border-white/20">2</div>
             </div>
-            <div>
-               <p className="text-xs font-black uppercase tracking-widest text-white">Compare Realities</p>
-               <p className="text-[10px] text-white/60">Cross-reference strategic outcomes</p>
+            <div className="text-center sm:text-left">
+               <p className="text-[10px] md:text-xs font-black uppercase tracking-[0.2em] text-white">Compare Realities</p>
+               <p className="text-[9px] md:text-[10px] text-white/60 font-medium uppercase mt-0.5">Dual-Variant Strategic correlation analysis ready</p>
             </div>
             <button 
               onClick={() => setIsComparing(true)}
-              className="bg-white text-blue-900 px-6 py-2 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-blue-50 transition-colors"
+              className="w-full sm:w-auto bg-white text-blue-900 px-6 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-blue-50 transition-colors shadow-lg"
             >
-              Analyze Correlation
+              Initialize Analyze
             </button>
           </motion.div>
+        )}
+
+        {showBackToTop && (
+          <motion.button 
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            className="fixed bottom-6 right-6 w-12 h-12 rounded-full glass bg-blue-600 text-white shadow-2xl flex items-center justify-center z-[60] border-blue-400/50 mb-[env(safe-area-inset-bottom)]"
+          >
+            <ArrowRight className="w-6 h-6 -rotate-90" />
+          </motion.button>
         )}
       </div>
       <AnimatePresence>
@@ -341,6 +578,7 @@ export default function AuditHistory() {
           />
         )}
       </AnimatePresence>
-    </main>
+      </main>
+    </div>
   )
 }
