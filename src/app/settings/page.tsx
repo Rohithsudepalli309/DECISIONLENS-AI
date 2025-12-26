@@ -1,10 +1,11 @@
 "use client"
 
-import React from "react"
+import React, { useState } from "react"
 import { Navbar } from "@/components/Navbar"
 import { useDecisionStore } from "@/store/useDecisionStore"
-import { Shield, RefreshCw, Save, Cpu, Globe } from "lucide-react"
 import { Toast, ToastType } from "@/components/Toast"
+import { BICommandCenter } from "@/components/BICommandCenter"
+import { Shield, RefreshCw, Save, Cpu, Globe } from 'lucide-react'; // Added lucide-react imports
 
 export default function SettingsPage() {
   const { guardrails, setGuardrails } = useDecisionStore()
@@ -88,6 +89,10 @@ export default function SettingsPage() {
                   <p className="text-[8px] text-white/20 italic leading-tight">Sensitivity limit before Rank Stability is flagged as &apos;Risky&apos; in dashboards.</p>
                </div>
             </div>
+          </section>
+
+          <section className="glass-card !p-5 md:!p-8 space-y-8">
+             <BICommandCenter />
           </section>
 
           <footer className="grid grid-cols-2 gap-4">

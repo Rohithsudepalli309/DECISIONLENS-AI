@@ -130,6 +130,11 @@ body {
   }
 }
 
+/* Mobile Touch Optimization */
+input[type="range"] {
+  touch-action: pan-y;
+}
+
 /* Telemetry Visibility */
 .telemetry-overlay {
   pointer-events: none;

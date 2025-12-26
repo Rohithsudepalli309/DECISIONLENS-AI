@@ -6,70 +6,41 @@ import { Navbar } from "@/components/Navbar"
 import axios from "axios"
 import { useAuthStore } from "@/store/useAuthStore"
 import { useDecisionStore } from "@/store/useDecisionStore"
+import { useHistoryStore, AuditItem } from "@/store/useHistoryStore"
 import { useRouter } from "next/navigation"
 import { API_BASE_URL } from "@/lib/api-config"
-import { Calendar, Tag, Target, Search, Filter, Play, Download, Trash2, Edit3, FileSpreadsheet, Copy, ArrowRight } from "lucide-react"
 import { Skeleton } from "@/components/Skeleton"
 import { Toast, ToastType } from "@/components/Toast"
 import { DecisionData } from "@/components/DecisionStepper"
 import { DecisionResults } from "@/store/useDecisionStore"
-
-interface AuditItem {
-  id: number
-  timestamp: string
-  goal: string
-  domain: string
-  project_name?: string
-  recommended_option: string
-  score: number
-  constraints?: {
-    max_cost: number;
-    min_availability: number;
-  }
-  preferences?: string[]
-  strategy?: string
-  simulation_results?: Array<{ 
-    option: string; 
-    score: number;
-    metrics: {
-      cost: number;
-      availability: number;
-      risk: number;
-    };
-    simulation: {
-      cost_dist: number[];
-      availability_dist: number[];
-      risk_dist: number[];
-      expected: {
-        cost: number;
-        availability: number;
-        risk: number;
-      };
-    };
-  }>
-  options?: Array<{ name: string; parameters: { base_cost: number; risk: number; availability: number } }>
-  weights?: number[]
-  sensitivity?: {
-    stability_index: number;
-    margin: number;
-    is_robust: boolean;
-    critical_vectors: string[];
-  }
-}
+import { SwipeableAuditCard } from "@/components/SwipeableAuditCard"
+import { ForesightAudit } from "@/components/ForesightAudit"
+import { Calendar, Tag, Target, Search, Filter, Play, Download, Trash2, Edit3, FileSpreadsheet, Copy, ArrowRight, RefreshCw } from "lucide-react"
 
 export default function AuditHistory() {
   const { isLoggedIn, hasHydrated: authHydrated } = useAuthStore()
   const { setFormData, setResults, setView, hasHydrated: decisionHydrated } = useDecisionStore()
+  
+  // Offline-First History Store
+  const { audits, fetchHistory, isLoading: isSyncing, setAudits, hasHydrated: historyHydrated, recordRealizedData, runBacktest } = useHistoryStore()
+  
   const router = useRouter()
-  const [audits, setAudits] = useState<AuditItem[]>([])
-  const [loading, setLoading] = useState(true)
+  
   const [search, setSearch] = useState("")
   const [filterDomain, setFilterDomain] = useState<string | null>(null)
   const [selectedProject, setSelectedProject] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [isComparing, setIsComparing] = useState(false)
+  
+  const [foresightReports, setForesightReports] = useState<Record<number, { foresight_report: any }>>({})
+  const [isRealizing, setIsRealizing] = useState<number | null>(null)
+  const [realizedForm, setRealizedForm] = useState({ cost: 0, availability: 0, risk: 0 })
+  
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null)
   const [showBackToTop, setShowBackToTop] = useState(false)
+
+  // Pull to Refresh State
+  const [isPulling, setIsPulling] = useState(false)
 
   const showToast = (message: string, type: ToastType = 'info') => {
     setToast({ message, type })
@@ -145,19 +116,24 @@ export default function AuditHistory() {
     setTimeout(() => router.push("/"), 500)
   }
 
-  const deleteAudit = async (e: React.MouseEvent, id: number) => {
-    e.stopPropagation()
+  const deleteAudit = async (id: number, e?: React.MouseEvent) => {
+    e?.stopPropagation()
     if (!confirm("Are you sure you want to purge this audit from the station archives?")) return
     
+    // Optimistic Update
+    const previousAudits = audits
+    setAudits(audits.filter(a => a.id !== id))
+
     try {
       const token = useAuthStore.getState().token
       await axios.delete(`${API_BASE_URL}/decision/audit/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       })
-      setAudits(prev => prev.filter(a => a.id !== id))
       showToast("Audit Purged Successfully", "success")
     } catch (err) {
       console.error("Delete failed", err)
+      // Rollback
+      setAudits(previousAudits)
       showToast("Purge Protocol Failed", "error")
     }
   }
@@ -166,15 +142,19 @@ export default function AuditHistory() {
     const newGoal = prompt("Enter new goal description:", currentGoal)
     if (!newGoal || newGoal === currentGoal) return
 
+    // Optimistic Update
+    const previousAudits = audits
+    setAudits(audits.map(a => a.id === id ? { ...a, goal: newGoal } : a))
+
     try {
       const token = useAuthStore.getState().token
       await axios.patch(`${API_BASE_URL}/decision/audit/${id}`, { goal: newGoal }, {
         headers: { Authorization: `Bearer ${token}` }
       })
-      setAudits(prev => prev.map(a => a.id === id ? { ...a, goal: newGoal } : a))
       showToast("Metadata Synchronized", "success")
     } catch (err) {
       console.error("Rename failed", err)
+      setAudits(previousAudits) // Rollback
       showToast("Sync Failed", "error")
     }
   }
@@ -191,25 +171,18 @@ export default function AuditHistory() {
     showToast("Executive Report generated", "info")
   }
 
-  useEffect(() => {
-    if (!isLoggedIn || !authHydrated || !decisionHydrated) return
-    const fetchHistory = async () => {
-      try {
-        const token = useAuthStore.getState().token
-        const res = await axios.get(`${API_BASE_URL}/decision/history`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-        setAudits(res.data)
-      } catch (err) {
-        console.error("Failed to fetch history", err)
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchHistory()
-  }, [isLoggedIn, authHydrated, decisionHydrated])
+    useEffect(() => {
+    if (!isLoggedIn || !authHydrated || !decisionHydrated || !historyHydrated) return
+    
+    // Initial fetch (Stale-while-revalidate)
+    fetchHistory().catch(err => console.error("History sync failed", err))
+    
+    // Auto-refresh every 60s
+    const interval = setInterval(() => fetchHistory(), 60000)
+    return () => clearInterval(interval)
+  }, [isLoggedIn, authHydrated, decisionHydrated, historyHydrated, fetchHistory])
 
-  if (!authHydrated || !decisionHydrated || !isLoggedIn) return null
+  if (!authHydrated || !decisionHydrated || !historyHydrated || !isLoggedIn) return null
 
   const filteredAudits = audits.filter((item: AuditItem) => {
     const matchesSearch = item.goal.toLowerCase().includes(search.toLowerCase()) || 
@@ -231,12 +204,41 @@ export default function AuditHistory() {
   }
 
   const selectedAudits = audits.filter(a => selectedIds.includes(a.id))
+  
+  const handleDrag = (_: MouseEvent | TouchEvent | PointerEvent, info: { offset: { y: number } }) => {
+    if (window.scrollY === 0 && info.offset.y > 20) {
+      setIsPulling(true)
+    } else {
+      setIsPulling(false)
+    }
+  }
+
+  const handlePanEnd = async (_: MouseEvent | TouchEvent | PointerEvent, info: { offset: { y: number } }) => {
+    if (window.scrollY === 0 && info.offset.y > 100) {
+      if (navigator.vibrate) navigator.vibrate(50)
+      showToast("Syncing Intelligence...", "info")
+      await fetchHistory()
+      showToast("Sync Complete", "success")
+    }
+    setIsPulling(false)
+  }
 
   return (
-    <div className="min-h-screen bg-[#050505] selection:bg-blue-500/30">
+    <div className="min-h-screen bg-[#050505] selection:bg-blue-500/30 overflow-hidden">
       <Navbar />
       
-      <main className="container mx-auto px-4 pt-24 md:pt-32 flex flex-col lg:flex-row gap-8 pb-20">
+      <motion.div 
+        drag="y"
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={0.2}
+        onDrag={handleDrag}
+        onDragEnd={handlePanEnd}
+        className="container mx-auto px-4 pt-24 md:pt-32 flex flex-col lg:flex-row gap-8 pb-20 min-h-screen"
+      >
+        {/* Pull Indicator */}
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 flex flex-col items-center justify-center opacity-50 pointer-events-none">
+           <RefreshCw className={`w-6 h-6 text-blue-400 ${isPulling ? 'animate-spin' : ''}`} />
+        </div>
         {/* Workspace Sidebar */}
         <div className="hidden lg:block w-64 shrink-0 space-y-8 sticky top-32 self-start h-[calc(100vh-8rem)]">
              <div>
@@ -275,10 +277,46 @@ export default function AuditHistory() {
         </div>
 
         <div className="flex-1 min-w-0">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 md:mb-12 gap-6">
-          <div className="md:border-l-4 md:border-blue-600 md:pl-6">
+          
+          {/* Mobile/Tablet Workspace Selector (Horizontal Scroll) */}
+          <div className="lg:hidden mb-8 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide flex gap-3">
+             <button 
+               onClick={() => setSelectedProject(null)}
+               className={`whitespace-nowrap px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+                 !selectedProject 
+                   ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20" 
+                   : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
+               }`}
+             >
+               All Projects ({audits.length})
+             </button>
+             {uniqueProjects.map(p => (
+               <button 
+                 key={p}
+                 onClick={() => setSelectedProject(p)}
+                 className={`whitespace-nowrap px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+                   selectedProject === p 
+                     ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20" 
+                     : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
+                 }`}
+               >
+                 {p} ({audits.filter(a => (a.project_name || "General") === p).length})
+               </button>
+             ))}
+          </div>
+
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 md:mb-12 gap-6">
+            <div className="md:border-l-4 md:border-blue-600 md:pl-6">
             <h1 className="text-2xl md:text-4xl font-black uppercase tracking-tighter italic">Audit Archive</h1>
-            <p className="text-[10px] md:text-sm text-white/40 uppercase font-bold tracking-widest mt-1 italic">Historical Intelligence Registry</p>
+            <div className="flex items-center gap-3 mt-1">
+              <p className="text-[10px] md:text-sm text-white/40 uppercase font-bold tracking-widest italic">Historical Intelligence Registry</p>
+              {isSyncing && (
+                 <div className="flex items-center gap-1 text-[10px] text-blue-400 font-bold uppercase animate-pulse">
+                   <RefreshCw className="w-3 h-3 animate-spin" />
+                   Syncing
+                 </div>
+              )}
+            </div>
           </div>
 
           <div className="flex gap-3 w-full md:w-auto">
@@ -316,7 +354,7 @@ export default function AuditHistory() {
           </div>
         </div>
 
-        {loading ? (
+        {audits.length === 0 && isSyncing ? (
           <div className="grid gap-4">
             {[1, 2, 3, 4, 5].map(i => (
               <div key={i} className="glass-card p-6 flex flex-col md:flex-row justify-between gap-6">
@@ -401,6 +439,47 @@ export default function AuditHistory() {
                       </div>
                     </div>
 
+                    {/* Foresight Section */}
+                    <div className="glass-card !bg-white/5 border-dashed border-white/10 !p-4">
+                       {foresightReports[audit.id] ? (
+                          <ForesightAudit 
+                            report={foresightReports[audit.id].foresight_report} 
+                            strategy={audit.goal} 
+                          />
+                       ) : audit.realized_data ? (
+                          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                             <div>
+                                <p className="text-[10px] font-black uppercase text-blue-400 mb-1">Intelligence Loop Ready</p>
+                                <p className="text-[9px] text-white/40 uppercase font-medium">Realized data synchronized. Ready for gap analysis.</p>
+                             </div>
+                             <button 
+                               onClick={() => {
+                                  runBacktest(audit.id).then(report => {
+                                     setForesightReports(prev => ({ ...prev, [audit.id]: report }));
+                                     showToast("Foresight Analysis Complete", "success");
+                                  })
+                               }}
+                               className="px-6 py-2 rounded-lg bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 transition-all"
+                             >
+                                Run Audit
+                             </button>
+                          </div>
+                       ) : (
+                          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                             <div>
+                                <p className="text-[10px] font-black uppercase text-white/40 mb-1">Strategic Foresight Pending</p>
+                                <p className="text-[9px] text-white/20 uppercase font-medium">Inject actual outcomes to audit AI accuracy.</p>
+                             </div>
+                             <button 
+                               onClick={() => setIsRealizing(audit.id)}
+                               className="px-6 py-2 rounded-lg bg-white/5 border border-white/10 text-white/60 text-[10px] font-black uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all"
+                             >
+                                Record Reality
+                             </button>
+                          </div>
+                       )}
+                    </div>
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="glass-card !bg-white/[0.02] border-white/5 !p-4">
                         <p className="text-[8px] md:text-[10px] text-white/40 font-black uppercase mb-4 tracking-widest">Environmental Specs</p>
@@ -435,102 +514,107 @@ export default function AuditHistory() {
         ) : (
           <div className="grid gap-4">
             {filteredAudits.map((item: AuditItem) => (
-              <motion.div 
-                key={item.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                onClick={() => setSelectedIds(prev => prev.includes(item.id) ? prev.filter(i => i !== item.id) : [...prev, item.id].slice(-2))}
-                className={`glass-card p-4 md:p-6 group hover:translate-x-1 transition-all cursor-pointer border-l-4 ${
-                  selectedIds.includes(item.id) ? "border-l-blue-600 bg-blue-600/5 ring-1 ring-blue-500/20" : "border-l-white/10 hover:border-l-blue-600/50"
-                }`}
+              <SwipeableAuditCard 
+                key={item.id} 
+                onDelete={() => deleteAudit(item.id)}
+                onFork={() => forkScenario(item)}
               >
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                  <div className="flex items-center gap-4 md:gap-6 flex-grow min-w-0">
-                    <div 
-                      onClick={(e) => toggleSelection(e, item.id)}
-                      className={`hidden sm:flex w-6 h-6 rounded border items-center justify-center transition-all flex-shrink-0 ${
-                        selectedIds.includes(item.id) ? "bg-blue-600 border-blue-400" : "bg-white/5 border-white/10 group-hover:border-white/20"
-                      }`}
-                    >
-                       {selectedIds.includes(item.id) && <div className="w-2.5 h-2.5 bg-white rounded-sm" />}
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  onClick={() => setSelectedIds(prev => prev.includes(item.id) ? prev.filter(i => i !== item.id) : [...prev, item.id].slice(-2))}
+                  className={`glass-card p-4 md:p-6 group hover:translate-x-1 transition-all cursor-pointer border-l-4 ${
+                    selectedIds.includes(item.id) ? "border-l-blue-600 bg-blue-600/5 ring-1 ring-blue-500/20" : "border-l-white/10 hover:border-l-blue-600/50"
+                  }`}
+                >
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div className="flex items-center gap-4 md:gap-6 flex-grow min-w-0">
+                      <div 
+                        onClick={(e) => toggleSelection(e, item.id)}
+                        className={`hidden sm:flex w-6 h-6 rounded border items-center justify-center transition-all flex-shrink-0 ${
+                          selectedIds.includes(item.id) ? "bg-blue-600 border-blue-400" : "bg-white/5 border-white/10 group-hover:border-white/20"
+                        }`}
+                      >
+                         {selectedIds.includes(item.id) && <div className="w-2.5 h-2.5 bg-white rounded-sm" />}
+                      </div>
+                      <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 shadow-lg shadow-blue-500/10 flex-shrink-0">
+                        <Target className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="font-bold text-white/90 text-sm md:text-base mb-1 truncate italic tracking-tight">{item.goal}</h3>
+                        <div className="flex flex-wrap items-center gap-3 md:gap-4">
+                          <span className="text-[8px] md:text-[10px] uppercase font-black text-white/40 flex items-center gap-1.5 bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                            <Tag className="w-3 h-3 text-blue-400/60" /> {item.domain}
+                          </span>
+                          <span className="text-[8px] md:text-[10px] uppercase font-black text-white/40 flex items-center gap-1.5 bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                            <Calendar className="w-3 h-3 text-purple-400/60" /> {new Date(item.timestamp).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 shadow-lg shadow-blue-500/10 flex-shrink-0">
-                      <Target className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="font-bold text-white/90 text-sm md:text-base mb-1 truncate italic tracking-tight">{item.goal}</h3>
-                      <div className="flex flex-wrap items-center gap-3 md:gap-4">
-                        <span className="text-[8px] md:text-[10px] uppercase font-black text-white/40 flex items-center gap-1.5 bg-white/5 px-2 py-0.5 rounded border border-white/5">
-                          <Tag className="w-3 h-3 text-blue-400/60" /> {item.domain}
-                        </span>
-                        <span className="text-[8px] md:text-[10px] uppercase font-black text-white/40 flex items-center gap-1.5 bg-white/5 px-2 py-0.5 rounded border border-white/5">
-                          <Calendar className="w-3 h-3 text-purple-400/60" /> {new Date(item.timestamp).toLocaleDateString()}
-                        </span>
+
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 md:gap-12 w-full md:w-auto">
+                      <div className="flex justify-between w-full sm:w-auto gap-8 border-t border-white/5 sm:border-t-0 pt-4 sm:pt-0">
+                        <div className="text-left sm:text-right">
+                          <p className="text-[8px] md:text-[10px] uppercase font-black text-white/20 mb-1 tracking-widest">Winning Variant</p>
+                          <p className="font-black text-blue-400 uppercase tracking-tighter italic text-xs md:text-sm">{item.recommended_option}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[8px] md:text-[10px] uppercase font-black text-white/20 mb-1 tracking-widest">Score</p>
+                          <p className="font-mono text-base md:text-xl font-black text-white">{(item.score * 100).toFixed(1)}%</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                        <button 
+                          onClick={(e) => exportPDF(e, item.id)}
+                          className="hidden lg:flex w-10 h-10 rounded-xl bg-white/5 text-white/20 border border-white/10 hover:bg-white/10 hover:text-white transition-all items-center justify-center p-0"
+                          title="Download PDF"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={(e) => exportCSV(e, item.id)}
+                          className="w-10 h-10 rounded-xl bg-white/5 text-white/20 border border-white/10 hover:bg-green-500/10 hover:text-green-400 transition-all flex items-center justify-center p-0"
+                          title="Export CSV"
+                        >
+                          <FileSpreadsheet className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={(e) => deleteAudit(item.id, e)}
+                          className="w-10 h-10 rounded-xl bg-white/5 text-white/20 border border-white/10 hover:bg-red-500/10 hover:text-red-400 transition-all flex items-center justify-center p-0"
+                          title="Purge"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                        
+                        <div className="h-4 w-[1px] bg-white/10 mx-2 hidden sm:block" />
+
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            forkScenario(item)
+                          }}
+                          className="flex-grow sm:flex-none px-4 py-2.5 rounded-xl bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/30 transition-all flex items-center justify-center gap-2"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          <span className="text-[10px] font-black uppercase tracking-widest">Fork</span>
+                        </button>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            restoreActivity(item)
+                          }}
+                          className="flex-grow sm:flex-none px-4 py-2.5 rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-2"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          <span className="text-[10px] font-black uppercase tracking-widest text-white">Restore</span>
+                        </button>
                       </div>
                     </div>
                   </div>
-
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 md:gap-12 w-full md:w-auto">
-                    <div className="flex justify-between w-full sm:w-auto gap-8 border-t border-white/5 sm:border-t-0 pt-4 sm:pt-0">
-                      <div className="text-left sm:text-right">
-                        <p className="text-[8px] md:text-[10px] uppercase font-black text-white/20 mb-1 tracking-widest">Winning Variant</p>
-                        <p className="font-black text-blue-400 uppercase tracking-tighter italic text-xs md:text-sm">{item.recommended_option}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[8px] md:text-[10px] uppercase font-black text-white/20 mb-1 tracking-widest">Score</p>
-                        <p className="font-mono text-base md:text-xl font-black text-white">{(item.score * 100).toFixed(1)}%</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                      <button 
-                        onClick={(e) => exportPDF(e, item.id)}
-                        className="hidden lg:flex w-10 h-10 rounded-xl bg-white/5 text-white/20 border border-white/10 hover:bg-white/10 hover:text-white transition-all items-center justify-center p-0"
-                        title="Download PDF"
-                      >
-                        <Download className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={(e) => exportCSV(e, item.id)}
-                        className="w-10 h-10 rounded-xl bg-white/5 text-white/20 border border-white/10 hover:bg-green-500/10 hover:text-green-400 transition-all flex items-center justify-center p-0"
-                        title="Export CSV"
-                      >
-                        <FileSpreadsheet className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={(e) => deleteAudit(e, item.id)}
-                        className="w-10 h-10 rounded-xl bg-white/5 text-white/20 border border-white/10 hover:bg-red-500/10 hover:text-red-400 transition-all flex items-center justify-center p-0"
-                        title="Purge"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                      
-                      <div className="h-4 w-[1px] bg-white/10 mx-2 hidden sm:block" />
-
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          forkScenario(item)
-                        }}
-                        className="flex-grow sm:flex-none px-4 py-2.5 rounded-xl bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/30 transition-all flex items-center justify-center gap-2"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Fork</span>
-                      </button>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          restoreActivity(item)
-                        }}
-                        className="flex-grow sm:flex-none px-4 py-2.5 rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-2"
-                      >
-                        <Play className="w-3.5 h-3.5 fill-current" />
-                        <span className="text-[10px] font-black uppercase tracking-widest text-white">Restore</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
+                </motion.div>
+              </SwipeableAuditCard>
             ))}
           </div>
         )}
@@ -570,6 +654,60 @@ export default function AuditHistory() {
         )}
       </div>
       <AnimatePresence>
+        {isRealizing && (
+          <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+             <motion.div 
+               initial={{ scale: 0.9, opacity: 0 }}
+               animate={{ scale: 1, opacity: 1 }}
+               className="w-full max-w-md glass-card bg-[#0a0a0a] border-white/10 p-6 space-y-6"
+             >
+                <div>
+                   <h3 className="text-lg font-black uppercase italic text-white">Reality Sync</h3>
+                   <p className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Manual ingestion of actual outcomes</p>
+                </div>
+                
+                <div className="space-y-4">
+                   {['cost', 'availability', 'risk'].map(metric => (
+                      <div key={metric} className="space-y-2">
+                         <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                            <span className="text-white/40">{metric}</span>
+                            <span className="text-blue-400">{realizedForm[metric as keyof typeof realizedForm]}</span>
+                         </div>
+                         <input 
+                           type="range"
+                           min={metric === 'availability' ? 0.8 : 0}
+                           max={metric === 'availability' ? 1.0 : 100}
+                           step={metric === 'availability' ? 0.01 : 1}
+                           value={realizedForm[metric as keyof typeof realizedForm]}
+                           onChange={(e) => setRealizedForm({...realizedForm, [metric]: parseFloat(e.target.value)})}
+                           className="w-full h-1 bg-white/10 rounded-full appearance-none accent-blue-500"
+                         />
+                      </div>
+                   ))}
+                </div>
+
+                <div className="flex gap-4 pt-4">
+                   <button 
+                     onClick={() => setIsRealizing(null)}
+                     className="flex-1 py-3 rounded-xl bg-white/5 text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all"
+                   >
+                      Abort
+                   </button>
+                   <button 
+                     onClick={() => {
+                        recordRealizedData(isRealizing, realizedForm).then(() => {
+                           setIsRealizing(null);
+                           showToast("Reality Synchronized", "success");
+                        });
+                     }}
+                     className="flex-1 py-3 rounded-xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 transition-all"
+                   >
+                      Commit Reality
+                   </button>
+                </div>
+             </motion.div>
+          </div>
+        )}
         {toast && (
           <Toast 
             message={toast.message} 
@@ -578,7 +716,7 @@ export default function AuditHistory() {
           />
         )}
       </AnimatePresence>
-      </main>
+      </motion.div>
     </div>
   )
 }

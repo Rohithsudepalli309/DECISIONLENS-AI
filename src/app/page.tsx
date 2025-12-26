@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, Suspense } from "react"
 import { Navbar } from "@/components/Navbar"
 import { DecisionStepper, DecisionData } from "@/components/DecisionStepper"
 import { motion, AnimatePresence } from "framer-motion"
@@ -19,16 +19,17 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Toast, ToastType } from "@/components/Toast"
 import { Skeleton } from "@/components/Skeleton"
 
-// DecisionResults interface moved to store for consistency
-
-export default function Home() {
+function HomeContent() {
   const { isLoggedIn, hasHydrated: authHydrated } = useAuthStore()
   const { 
     activeView: view, 
     setView, 
     results, 
     setResults, 
-    hasHydrated: decisionHydrated 
+    hasHydrated: decisionHydrated,
+    queueOfflineSubmission,
+    processOfflineQueue,
+    offlineQueue
   } = useDecisionStore()
   
   const router = useRouter()
@@ -80,25 +81,80 @@ export default function Home() {
     }
   }, [isLoggedIn, authHydrated, router])
 
+  useEffect(() => {
+    const handleOnline = () => {
+      const token = useAuthStore.getState().token
+      if (token && isLoggedIn) {
+        processOfflineQueue(token, API_BASE_URL)
+        showToast("Neural Link Restored. Syncing queued strategies...", "success")
+      }
+    }
+    window.addEventListener('online', handleOnline)
+    return () => window.removeEventListener('online', handleOnline)
+  }, [isLoggedIn, processOfflineQueue, showToast])
+
   if (!authHydrated || !decisionHydrated || !isLoggedIn) return null
 
   const handleAnalyze = async (formData: DecisionData) => {
+    if (!navigator.onLine) {
+      queueOfflineSubmission(formData)
+      showToast("Offline Mode Detected. Strategy queued for auto-sync.", "info")
+      return
+    }
+
     setLoading(true)
     try {
       const token = useAuthStore.getState().token
       const response = await axios.post(`${API_BASE_URL}/decision/recommend`, {
         ...formData,
         iterations: useDecisionStore.getState().guardrails.iterations,
-        seed: 42 // Enterprise default
+        seed: 42 
       }, {
         headers: { Authorization: `Bearer ${token}` }
       })
-      setResults(response.data)
-      setView("results")
-      showToast("Simulation Analysis Complete", "success")
-    } catch (error) {
+
+      const task_id = response.data.task_id;
+      
+      // Polling Logic
+      let completed = false;
+      let finalResults = null;
+      let attempts = 0;
+      
+      while (!completed && attempts < 30) { // Max 30 seconds wait
+        const statusRes = await axios.get(`${API_BASE_URL}/decision/task/${task_id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        if (statusRes.data.status === "COMPLETED") {
+          finalResults = statusRes.data.results;
+          completed = true;
+        } else if (statusRes.data.status === "FAILED") {
+          throw new Error(statusRes.data.error || "Neural Simulation Failed");
+        } else {
+          // PROCESSING or PENDING
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          attempts++;
+        }
+      }
+
+      if (finalResults) {
+        setResults(finalResults)
+        setView("results")
+        showToast("Simulation Analysis Complete", "success")
+      } else {
+        throw new Error("Simulation Timeout: The Intelligence Engine is processing a massive dataset. Please check history later.")
+      }
+    } catch (error: unknown) {
       console.error("Simulation failed:", error)
-      showToast("Simulation Protocol Failed", "error")
+      let msg = "Simulation Protocol Failed"
+      
+      if (axios.isAxiosError(error)) {
+        msg = error.response?.data?.detail || error.message;
+      } else if (error instanceof Error) {
+        msg = error.message
+      }
+      
+      showToast(msg, "error")
     } finally {
       setLoading(false)
     }
@@ -358,5 +414,17 @@ export default function Home() {
         )}
       </AnimatePresence>
     </main>
+  )
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={
+       <div className="min-h-screen flex items-center justify-center bg-[#050505] text-blue-500">
+         <div className="animate-spin w-8 h-8 border-4 border-current border-t-transparent rounded-full" />
+       </div>
+    }>
+      <HomeContent />
+    </Suspense>
   )
 }

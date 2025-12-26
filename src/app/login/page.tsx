@@ -2,11 +2,12 @@
 
 import React, { useState } from "react"
 import { motion } from "framer-motion"
-import { BrainCircuit, Lock, Mail, ArrowRight, Github, Chrome } from "lucide-react"
+import { BrainCircuit, Lock, Mail, ArrowRight, Github, Chrome, Fingerprint } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useAuthStore } from "@/store/useAuthStore"
 import axios from "axios"
 import { API_BASE_URL } from "@/lib/api-config"
+import { useBiometrics } from "@/hooks/useBiometrics"
 
 export default function LoginPage() {
   const [username, setUsername] = useState("")
@@ -14,6 +15,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [isRegister, setIsRegister] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  const { isSupported, verifyBiometrics } = useBiometrics()
   
   const loginStore = useAuthStore((state) => state.login)
   const router = useRouter()
@@ -39,6 +42,7 @@ export default function LoginPage() {
         
         const loginRes = await axios.post(`${API_BASE_URL}/auth/login`, formData)
         loginStore(username, loginRes.data.access_token)
+        localStorage.setItem('last_strategist_id', username)
       }
       
       router.push("/")
@@ -52,6 +56,23 @@ export default function LoginPage() {
       setLoading(false)
     }
   }
+
+  const handleBiometricLogin = async () => {
+    setLoading(true);
+    setError(null);
+    const success = await verifyBiometrics();
+    if (success) {
+      // In a real app, you'd send the assertion to the backend.
+      // For this UX polish, we simulate a successful passkey handshake.
+      const lastUser = localStorage.getItem('last_strategist_id') || 'AI_STRATEGIST_01';
+      const mockToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZW1vX3VzZXIifQ"; 
+      loginStore(lastUser, mockToken);
+      router.push("/");
+    } else {
+      setError("Biometric identity could not be verified.");
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen relative flex items-center justify-center p-4 md:p-8 overflow-hidden font-sans">
@@ -134,6 +155,16 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+
+          {isSupported && !isRegister && (
+            <button 
+              onClick={handleBiometricLogin}
+              className="w-full py-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-white font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 transition-all"
+            >
+              <Fingerprint className="w-5 h-5 text-blue-400" />
+              Biometric Rapid Entry
+            </button>
+          )}
 
           <button 
             type="button"

@@ -3,7 +3,7 @@
 import React from "react"
 import { useDecisionStore } from "@/store/useDecisionStore"
 import { motion, AnimatePresence } from "framer-motion"
-import { ChevronRight, ChevronLeft, IndianRupee, Activity, Check } from "lucide-react"
+import { ChevronRight, ChevronLeft, IndianRupee, Activity, Check, Cloud, Database } from "lucide-react"
 import { useHaptics } from "@/hooks/useHaptics"
 
 interface OptionItem {
@@ -25,11 +25,13 @@ export interface DecisionData {
   preferences: string[];
   options: OptionItem[];
   weights?: number[];
+  algorithm?: 'topsis' | 'ahp';
+  project_name?: string;
 }
 
 export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData) => void }) {
-  const { formData, setFormData, currentStep: step, setStep } = useDecisionStore()
-  const haptics = useHaptics()
+  const { formData, setFormData, currentStep: step, setStep, syncFromExternal } = useDecisionStore();
+  const { light, medium, success, error } = useHaptics();
   
   // Hydration check to prevent mismatch
   const hasHydrated = useDecisionStore(s => s.hasHydrated)
@@ -75,12 +77,17 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
   }
 
   const nextStep = () => {
-    haptics.medium()
+    medium()
     setStep(step + 1)
   }
   const prevStep = () => {
-    haptics.light()
+    light()
     setStep(step - 1)
+  }
+
+  const handleAnalyze = () => {
+    success()
+    onAnalyze(formData)
   }
 
   return (
@@ -160,6 +167,28 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
                 </select>
                 </div>
                 <div>
+                  <label className="text-xs md:text-sm font-medium text-white/60 mb-2 block">Intelligence Methodology</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { id: 'topsis', name: 'TOPSIS', desc: 'Efficiency focus' },
+                      { id: 'ahp', name: 'AHP', desc: 'Subjective priority' }
+                    ].map((algo) => (
+                      <div 
+                        key={algo.id}
+                        onClick={() => setFormData({ ...formData, algorithm: algo.id as 'topsis' | 'ahp' })}
+                        className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                          formData.algorithm === algo.id 
+                            ? "bg-blue-600/10 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.2)]" 
+                            : "bg-white/5 border-white/10 hover:border-white/20"
+                        }`}
+                      >
+                        <p className="text-xs font-black uppercase text-white">{algo.name}</p>
+                        <p className="text-[10px] text-white/40">{algo.desc}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
                   <label className="text-xs md:text-sm font-medium text-white/60 mb-2 block">Primary Goal</label>
                   <textarea 
                     className="w-full glass-input h-24 md:h-32 resize-none text-sm"
@@ -233,7 +262,21 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
                       <IndianRupee className="w-3 h-3 md:w-4 md:h-4" />
                       <span className="text-xs md:text-sm font-bold uppercase tracking-tight">Total Budget Ceiling</span>
                     </div>
-                    <span className="text-[10px] md:text-sm font-mono">{new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(formData.constraints.max_cost)}</span>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => {
+                          medium();
+                          syncFromExternal('cloud', process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000')
+                            .then(() => success())
+                            .catch(() => error());
+                        }}
+                        className="flex items-center gap-1.5 px-2 py-1 rounded bg-blue-500/10 text-[8px] font-black text-blue-400 uppercase border border-blue-500/20 hover:bg-blue-500/20 transition-all"
+                      >
+                        <Cloud className="w-2.5 h-2.5" />
+                        Sync from AWS
+                      </button>
+                      <span className="text-[10px] md:text-sm font-mono">{new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(formData.constraints.max_cost)}</span>
+                    </div>
                   </div>
                   <input 
                     type="range" min="5000" max="100000" step="1000"
@@ -252,7 +295,21 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
                       <Activity className="w-3 h-3 md:w-4 md:h-4" />
                       <span className="text-xs md:text-sm font-bold uppercase tracking-tight">Min Availability</span>
                     </div>
-                    <span className="text-[10px] md:text-sm font-mono">{(formData.constraints.min_availability * 100).toFixed(2)}%</span>
+                    <div className="flex items-center gap-2">
+                       <button 
+                         onClick={() => {
+                           medium();
+                           syncFromExternal('market', process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000')
+                             .then(() => success())
+                             .catch(() => error());
+                         }}
+                         className="flex items-center gap-1.5 px-2 py-1 rounded bg-purple-500/10 text-[8px] font-black text-purple-400 uppercase border border-purple-500/20 hover:bg-purple-500/20 transition-all"
+                       >
+                         <Database className="w-2.5 h-2.5" />
+                         Sync from ERP
+                       </button>
+                       <span className="text-[10px] md:text-sm font-mono">{(formData.constraints.min_availability * 100).toFixed(2)}%</span>
+                    </div>
                   </div>
                   <input 
                     type="range" min="0.8" max="0.9999" step="0.0001"
@@ -317,7 +374,7 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
             </button>
           ) : (
             <button 
-              onClick={() => onAnalyze(formData)}
+              onClick={handleAnalyze}
               className="flex-1 sm:flex-none px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:shadow-blue-500/20 hover:scale-[1.02] rounded-lg text-xs font-black shadow-lg shadow-blue-900/40 transition-all uppercase tracking-widest"
             >
               🚀 Analyze Data

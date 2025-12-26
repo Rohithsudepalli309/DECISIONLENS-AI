@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useEffect } from "react"
+import React, { createContext, useContext, useEffect, Suspense } from "react"
 import { usePathname, useSearchParams } from "next/navigation"
 
 interface TelemetryContext {
@@ -11,7 +11,8 @@ interface TelemetryContext {
 
 const TelemetryContext = createContext<TelemetryContext | null>(null)
 
-export function TelemetryProvider({ children }: { children: React.ReactNode }) {
+// Tracking component that uses search params
+function TelemetryTracker() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
@@ -20,6 +21,10 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
     console.log(`[Telemetry] PageView: ${pathname}${searchParams?.toString() ? '?' + searchParams.toString() : ''}`)
   }, [pathname, searchParams])
 
+  return null
+}
+
+export function TelemetryProvider({ children }: { children: React.ReactNode }) {
   const trackEvent = (name: string, data?: unknown) => {
     console.log(`[Telemetry] Event: ${name}`, data)
   }
@@ -34,6 +39,9 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <TelemetryContext.Provider value={{ trackEvent, trackError, trackComputation }}>
+      <Suspense fallback={null}>
+        <TelemetryTracker />
+      </Suspense>
       {children}
     </TelemetryContext.Provider>
   )

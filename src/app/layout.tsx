@@ -1,16 +1,9 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+// Fallback to system fonts for build stability
+const geistSans = { variable: "font-sans" };
+const geistMono = { variable: "font-mono" };
 
 export const metadata: Metadata = {
   title: "DecisionLens AI | Strategic Intelligence Platform",
@@ -42,6 +35,10 @@ import { OnboardingTour } from "@/components/OnboardingTour";
 import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
 import { TelemetryProvider } from "@/components/TelemetryProvider";
 
+import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
+import { BottomNav } from "@/components/BottomNav";
+import { NeuralBackdrop } from "@/components/NeuralBackdrop";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -50,10 +47,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased selection:bg-blue-500/30 bg-[#050505]`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased selection:bg-blue-500/30 bg-[#050505] pb-24 md:pb-0`}
       >
+        <NeuralBackdrop />
         <GlobalErrorBoundary>
           <TelemetryProvider>
+            <PWAInstallPrompt />
+            <BottomNav />
             <KeyboardShortcuts />
             <CommandPalette>
               <PageTransition>

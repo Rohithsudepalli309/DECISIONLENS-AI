@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { BrainCircuit, Command, Menu, X, History, Settings, FileText, Activity, Zap, Globe } from "lucide-react"
+import { BrainCircuit, Command, History, Settings, FileText, Activity, Zap, Globe } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useAuthStore } from "@/store/useAuthStore"
@@ -12,7 +12,6 @@ import { LanguageToggle } from "./LanguageToggle"
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = React.useState(false)
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false)
   const pathname = usePathname()
   const router = useRouter()
   const { isLoggedIn, user, logout } = useAuthStore()
@@ -20,7 +19,6 @@ export function Navbar() {
   const handleLogout = () => {
     if (confirm("Disconnect session? Unsaved simulation parameters will be lost.")) {
       logout()
-      setIsMobileMenuOpen(false)
       router.push("/login")
     }
   }
@@ -53,11 +51,6 @@ export function Navbar() {
     return () => clearInterval(interval)
   }, [])
 
-  // Close menu on navigation
-  React.useEffect(() => {
-    setIsMobileMenuOpen(false)
-  }, [pathname])
-
   if (pathname === "/login") return null
 
   const navLinks = [
@@ -71,7 +64,7 @@ export function Navbar() {
   return (
     <>
       <nav className={`fixed top-0 left-0 right-0 z-50 px-4 md:px-8 py-3 md:py-4 transition-all duration-300 ${
-        isScrolled || isMobileMenuOpen ? "bg-black/80 backdrop-blur-xl border-b border-white/10" : "bg-transparent"
+        isScrolled ? "bg-black/80 backdrop-blur-xl border-b border-white/10" : "bg-transparent"
       }`}>
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 group">
@@ -140,78 +133,13 @@ export function Navbar() {
               </Link>
             )}
 
-            {/* Mobile Toggle */}
-            <button 
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="p-2 rounded-lg bg-white/5 border border-white/10 text-white/40 hover:text-white md:hidden transition-all"
-            >
-              {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
+            {/* Mobile Actions Overlay (Instead of Menu) */}
+            <div className="md:hidden flex items-center gap-2">
+               <ThemeToggle />
+            </div>
           </div>
         </div>
       </nav>
-
-      {/* Mobile Drawer */}
-      <div className={`fixed inset-0 z-40 bg-black/95 backdrop-blur-2xl md:hidden transition-all duration-500 ${
-        isMobileMenuOpen ? "opacity-100 translate-x-0" : "opacity-0 translate-x-full pointer-events-none"
-      }`}>
-        <div className="pt-24 px-8 space-y-8">
-          <div className="flex flex-col gap-6">
-            {navLinks.map((link) => (
-              <Link 
-                key={link.name} 
-                href={link.href}
-                className="flex items-center gap-4 group"
-              >
-                <div className={`p-3 rounded-xl border transition-all ${
-                  pathname === link.href ? 'bg-blue-600/20 border-blue-500/50 text-blue-400' : 'bg-white/5 border-white/10 text-white/20'
-                }`}>
-                  <link.icon className="w-6 h-6" />
-                </div>
-                <span className={`text-2xl font-black uppercase tracking-tighter italic transition-all ${
-                  pathname === link.href ? 'text-white' : 'text-white/40'
-                }`}>
-                  {link.name}
-                </span>
-              </Link>
-            ))}
-          </div>
-
-          <div className="pt-8 border-t border-white/5 space-y-6">
-             {isLoggedIn ? (
-                 <div className="flex flex-col gap-6">
-                 <div className="flex gap-4 items-center">
-                    <div className="flex-1">
-                       <span className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em] block mb-2">Operations Terminal</span>
-                       <span className="text-lg font-bold text-blue-400 font-mono uppercase italic leading-none">{user?.terminalId}</span>
-                    </div>
-                    <div className="h-10 w-px bg-white/5" />
-                    <div className="flex-1">
-                       <span className="text-[10px] font-black text-white/20 uppercase tracking-[0.2em] block mb-2">Network Layer</span>
-                       <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${status === 'online' ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
-                          <span className="text-xs font-bold text-white/60 uppercase">{status}</span>
-                       </div>
-                    </div>
-                 </div>
-                 <button 
-                  onClick={handleLogout}
-                  className="w-full py-4 rounded-2xl bg-red-600 text-white font-black uppercase tracking-widest shadow-xl shadow-red-900/20"
-                 >
-                  TERMINAL LOGOUT
-                 </button>
-               </div>
-             ) : (
-                <Link 
-                  href="/login"
-                  className="w-full py-4 rounded-2xl bg-blue-600 text-white font-black text-center block uppercase tracking-widest shadow-xl shadow-blue-900/20"
-                >
-                  ACCESS TERMINAL
-                </Link>
-             )}
-          </div>
-        </div>
-      </div>
     </>
   )
 }
