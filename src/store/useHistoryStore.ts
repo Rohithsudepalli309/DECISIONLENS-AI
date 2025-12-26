@@ -45,10 +45,20 @@ export interface AuditItem {
     is_robust: boolean;
     critical_vectors: string[];
   }
-  realized_data?: {
+  realized_outcomes?: {
     cost: number;
     availability: number;
     risk: number;
+  }
+  backtest_report?: {
+    metrics: Record<string, {
+      projected: number;
+      realized: number;
+      drift_pct: number;
+      status: string;
+    }>;
+    foresight_score: number;
+    judgment: "STRATEGIC_MATCH" | "PROJECTION_FAILURE";
   }
 }
 
@@ -61,8 +71,7 @@ interface HistoryState {
   setAudits: (audits: AuditItem[]) => void
   setHasHydrated: (state: boolean) => void
   fetchHistory: () => Promise<void>
-  recordRealizedData: (id: number, data: { cost: number; availability: number; risk: number }) => Promise<void>
-  runBacktest: (id: number) => Promise<any>
+  recordRealizedData: (id: number, data: { cost: number; availability: number; risk: number }) => Promise<AuditItem['backtest_report']>
   clearHistory: () => void
 }
 
@@ -98,27 +107,23 @@ export const useHistoryStore = create<HistoryState>()(
       recordRealizedData: async (id, data) => {
         try {
           const token = useAuthStore.getState().token
-          await axios.patch(`${API_BASE_URL}/decision/audit/${id}/realize`, data, {
+          const res = await axios.post(`${API_BASE_URL}/decision/backtest/submit/${id}`, data, {
             headers: { Authorization: `Bearer ${token}` }
           })
+          
+          const report = res.data.report
+          
           set(state => ({
-            audits: state.audits.map(a => a.id === id ? { ...a, realized_data: data } : a)
+            audits: state.audits.map(a => a.id === id ? { 
+              ...a, 
+              realized_outcomes: data,
+              backtest_report: report 
+            } : a)
           }))
+          
+          return report
         } catch (err) {
           console.error("Failed to record realized data", err)
-          throw err
-        }
-      },
-
-      runBacktest: async (id) => {
-        try {
-          const token = useAuthStore.getState().token
-          const res = await axios.post(`${API_BASE_URL}/decision/audit/${id}/backtest`, {}, {
-            headers: { Authorization: `Bearer ${token}` }
-          })
-          return res.data
-        } catch (err) {
-          console.error("Backtest execution failed", err)
           throw err
         }
       }

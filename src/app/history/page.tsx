@@ -15,14 +15,15 @@ import { DecisionData } from "@/components/DecisionStepper"
 import { DecisionResults } from "@/store/useDecisionStore"
 import { SwipeableAuditCard } from "@/components/SwipeableAuditCard"
 import { ForesightAudit } from "@/components/ForesightAudit"
-import { Calendar, Tag, Target, Search, Filter, Play, Download, Trash2, Edit3, FileSpreadsheet, Copy, ArrowRight, RefreshCw } from "lucide-react"
+import { BacktestingDashboard } from "@/components/BacktestingDashboard"
+import { Calendar, Tag, Target, Search, Filter, Play, Download, Trash2, Edit3, FileSpreadsheet, Copy, ArrowRight, RefreshCw, BarChart3, Database } from "lucide-react"
 
 export default function AuditHistory() {
   const { isLoggedIn, hasHydrated: authHydrated } = useAuthStore()
   const { setFormData, setResults, setView, hasHydrated: decisionHydrated } = useDecisionStore()
   
   // Offline-First History Store
-  const { audits, fetchHistory, isLoading: isSyncing, setAudits, hasHydrated: historyHydrated, recordRealizedData, runBacktest } = useHistoryStore()
+  const { audits, fetchHistory, isLoading: isSyncing, setAudits, hasHydrated: historyHydrated, recordRealizedData } = useHistoryStore()
   
   const router = useRouter()
   
@@ -31,8 +32,8 @@ export default function AuditHistory() {
   const [selectedProject, setSelectedProject] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [isComparing, setIsComparing] = useState(false)
+  const [activeTab, setActiveTab] = useState<'archive' | 'foresight'>('archive')
   
-  const [foresightReports, setForesightReports] = useState<Record<number, { foresight_report: any }>>({})
   const [isRealizing, setIsRealizing] = useState<number | null>(null)
   const [realizedForm, setRealizedForm] = useState({ cost: 0, availability: 0, risk: 0 })
   
@@ -307,9 +308,22 @@ export default function AuditHistory() {
 
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 md:mb-12 gap-6">
             <div className="md:border-l-4 md:border-blue-600 md:pl-6">
-            <h1 className="text-2xl md:text-4xl font-black uppercase tracking-tighter italic">Audit Archive</h1>
+            <h1 className="text-2xl md:text-4xl font-black uppercase tracking-tighter italic">Intelligence Station</h1>
             <div className="flex items-center gap-3 mt-1">
-              <p className="text-[10px] md:text-sm text-white/40 uppercase font-bold tracking-widest italic">Historical Intelligence Registry</p>
+              <div className="flex gap-4">
+                 <button 
+                  onClick={() => setActiveTab('archive')}
+                  className={`text-[10px] md:text-xs uppercase font-black tracking-widest transition-all ${activeTab === 'archive' ? 'text-white border-b-2 border-blue-500 pb-1' : 'text-white/40 hover:text-white/60'}`}
+                 >
+                    Audit Archive
+                 </button>
+                 <button 
+                  onClick={() => setActiveTab('foresight')}
+                  className={`text-[10px] md:text-xs uppercase font-black tracking-widest transition-all ${activeTab === 'foresight' ? 'text-white border-b-2 border-purple-500 pb-1' : 'text-white/40 hover:text-white/60'}`}
+                 >
+                    Foresight Dashboard
+                 </button>
+              </div>
               {isSyncing && (
                  <div className="flex items-center gap-1 text-[10px] text-blue-400 font-bold uppercase animate-pulse">
                    <RefreshCw className="w-3 h-3 animate-spin" />
@@ -320,40 +334,46 @@ export default function AuditHistory() {
           </div>
 
           <div className="flex gap-3 w-full md:w-auto">
-             <div className="relative flex-grow md:w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 md:w-4 md:h-4 text-white/20" />
-                <input 
-                  className="w-full glass-input pl-10 h-10 md:h-12 text-[10px] md:text-xs font-black uppercase tracking-widest" 
-                  placeholder="Filter targets..." 
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-             </div>
-             <div className="relative group/filter">
-                <button className="glass-card !p-0 h-10 md:h-12 w-10 md:w-12 flex items-center justify-center hover:bg-blue-500/10 border-white/10 transition-all">
-                   <Filter className="w-4 h-4 text-white/40" />
-                </button>
-                <div className="absolute right-0 top-full mt-2 w-48 glass-card !p-2 opacity-0 group-hover/filter:opacity-100 pointer-events-none group-hover/filter:pointer-events-auto transition-all z-20">
-                   <button 
-                    onClick={() => setFilterDomain(null)}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-white/5 ${!filterDomain ? 'text-blue-400' : 'text-white/40'}`}
-                   >
-                     System-wide
-                   </button>
-                   {domains.map((d: string) => (
-                     <button 
-                      key={d}
-                      onClick={() => setFilterDomain(d)}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-white/5 ${filterDomain === d ? 'text-blue-400' : 'text-white/40'}`}
-                     >
-                       {d}
-                     </button>
-                   ))}
-                </div>
-             </div>
+             {activeTab === 'archive' && (
+                <>
+                   <div className="relative flex-grow md:w-64">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 md:w-4 md:h-4 text-white/20" />
+                      <input 
+                        className="w-full glass-input pl-10 h-10 md:h-12 text-[10px] md:text-xs font-black uppercase tracking-widest" 
+                        placeholder="Filter targets..." 
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                      />
+                   </div>
+                   <div className="relative group/filter">
+                      <button className="glass-card !p-0 h-10 md:h-12 w-10 md:w-12 flex items-center justify-center hover:bg-blue-500/10 border-white/10 transition-all">
+                         <Filter className="w-4 h-4 text-white/40" />
+                      </button>
+                      <div className="absolute right-0 top-full mt-2 w-48 glass-card !p-2 opacity-0 group-hover/filter:opacity-100 pointer-events-none group-hover/filter:pointer-events-auto transition-all z-20">
+                         <button 
+                          onClick={() => setFilterDomain(null)}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-white/5 ${!filterDomain ? 'text-blue-400' : 'text-white/40'}`}
+                         >
+                           System-wide
+                         </button>
+                         {domains.map((d: string) => (
+                           <button 
+                            key={d}
+                            onClick={() => setFilterDomain(d)}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-white/5 ${filterDomain === d ? 'text-blue-400' : 'text-white/40'}`}
+                           >
+                             {d}
+                           </button>
+                         ))}
+                      </div>
+                   </div>
+                </>
+             )}
           </div>
         </div>
 
+        {activeTab === 'archive' ? (
+           <>
         {audits.length === 0 && isSyncing ? (
           <div className="grid gap-4">
             {[1, 2, 3, 4, 5].map(i => (
@@ -439,31 +459,13 @@ export default function AuditHistory() {
                       </div>
                     </div>
 
-                    {/* Foresight Section */}
+                     {/* Foresight Section */}
                     <div className="glass-card !bg-white/5 border-dashed border-white/10 !p-4">
-                       {foresightReports[audit.id] ? (
+                       {audit.backtest_report ? (
                           <ForesightAudit 
-                            report={foresightReports[audit.id].foresight_report} 
+                            report={audit.backtest_report} 
                             strategy={audit.goal} 
                           />
-                       ) : audit.realized_data ? (
-                          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-                             <div>
-                                <p className="text-[10px] font-black uppercase text-blue-400 mb-1">Intelligence Loop Ready</p>
-                                <p className="text-[9px] text-white/40 uppercase font-medium">Realized data synchronized. Ready for gap analysis.</p>
-                             </div>
-                             <button 
-                               onClick={() => {
-                                  runBacktest(audit.id).then(report => {
-                                     setForesightReports(prev => ({ ...prev, [audit.id]: report }));
-                                     showToast("Foresight Analysis Complete", "success");
-                                  })
-                               }}
-                               className="px-6 py-2 rounded-lg bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 transition-all"
-                             >
-                                Run Audit
-                             </button>
-                          </div>
                        ) : (
                           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                              <div>
@@ -617,6 +619,10 @@ export default function AuditHistory() {
               </SwipeableAuditCard>
             ))}
           </div>
+        )}
+           </>
+        ) : (
+           <BacktestingDashboard />
         )}
 
         {selectedIds.length === 2 && !isComparing && (
