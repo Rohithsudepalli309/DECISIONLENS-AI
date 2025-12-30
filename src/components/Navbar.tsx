@@ -6,7 +6,7 @@ import Link from "next/link"
 import { useAuthStore } from "@/store/useAuthStore"
 import { useDecisionStore } from "@/store/useDecisionStore"
 import axios from "axios"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, APP_ENV } from "@/lib/api-config"
 import { ThemeToggle } from "./ThemeToggle"
 import { useI18n } from "@/hooks/useI18n"
 import { LanguageToggle } from "./LanguageToggle"
@@ -65,9 +65,14 @@ export function Navbar() {
             </span>
           </Link>
 
-          <div className="hidden md:flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/40 italic">
+          <div className="hidden md:flex items-center gap-3 text-[10px] font-black uppercase tracking-widest text-white/40 italic">
             <Zap className="w-3 h-3 text-blue-400" />
             Terminal active // {user?.username}@{user?.org_name || 'LOCAL'}
+            <div className={`px-2 py-0.5 rounded border ${
+              APP_ENV === 'production' ? 'bg-red-500/10 border-red-500/30 text-red-500' : 'bg-orange-500/10 border-orange-500/30 text-orange-500'
+            }`}>
+              {APP_ENV}
+            </div>
           </div>
 
           <div className="flex items-center gap-4 md:gap-6">

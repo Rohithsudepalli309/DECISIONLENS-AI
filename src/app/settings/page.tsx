@@ -1,11 +1,15 @@
+
 "use client"
 
-import React, { useState } from "react"
+import React from "react"
 import { Navbar } from "@/components/Navbar"
 import { useDecisionStore } from "@/store/useDecisionStore"
 import { Toast, ToastType } from "@/components/Toast"
 import { BICommandCenter } from "@/components/BICommandCenter"
 import { Shield, RefreshCw, Save, Cpu, Globe } from 'lucide-react'; // Added lucide-react imports
+import { SessionHandoff } from "@/components/SessionHandoff"
+import { VersionModal } from "@/components/VersionModal"
+
 
 export default function SettingsPage() {
   const { guardrails, setGuardrails } = useDecisionStore()
@@ -102,7 +106,18 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <p className="text-[8px] font-black text-white/20 uppercase tracking-widest">App Version</p>
-                  <p className="text-[10px] font-mono font-bold">v1.2.4-PRO</p>
+                  <p className="text-[8px] font-black text-white/20 uppercase tracking-widest">App Version</p>
+                  <VersionModal />
+                  {/* Universal Handoff Protocol */}
+                  <div className="pt-6 border-t border-white/5">
+                     <div className="flex justify-between items-center mb-4">
+                        <div>
+                           <h3 className="text-white font-bold text-sm">Session Continuity</h3>
+                           <p className="text-[10px] text-white/40 uppercase tracking-widest">Cross-device state transfer</p>
+                        </div>
+                        <SessionHandoff />
+                     </div>
+                  </div>
                 </div>
              </div>
              <div className="glass-card !p-4 flex items-center gap-3">

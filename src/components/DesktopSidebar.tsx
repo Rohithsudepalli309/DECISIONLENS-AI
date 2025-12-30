@@ -39,7 +39,7 @@ export const DesktopSidebar = () => {
   }
 
   return (
-    <aside className="hidden md:flex flex-col w-64 h-screen fixed left-0 top-0 bg-black/40 border-r border-white/5 backdrop-blur-3xl z-40 transition-all duration-500 hover:w-72 group">
+    <aside className="hidden md:flex flex-col w-20 h-screen fixed left-0 top-0 bg-black/40 border-r border-white/5 backdrop-blur-3xl z-40 transition-all duration-500 hover:w-72 group">
       {/* Brand Section */}
       <div className="p-8 flex items-center gap-3">
         <div className="p-2 rounded-xl bg-blue-600/20 border border-blue-500/30">

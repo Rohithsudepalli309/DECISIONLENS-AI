@@ -1,31 +1,45 @@
-# Build Stage
-FROM node:18-alpine AS builder
-
+# ----------------------------------------------------------------
+# Stage 1: Dependency Installation
+# ----------------------------------------------------------------
+FROM node:18-alpine AS deps
 WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci
 
-COPY package*.json ./
-RUN npm install
-
+# ----------------------------------------------------------------
+# Stage 2: Builder
+# ----------------------------------------------------------------
+FROM node:18-alpine AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build for production
+# Build with standalone output enabled in next.config.ts
+ENV NEXT_TELEMETRY_DISABLED 1
 RUN npm run build
 
-# Production Stage
+# ----------------------------------------------------------------
+# Stage 3: Production Runner
+# ----------------------------------------------------------------
 FROM node:18-alpine AS runner
-
 WORKDIR /app
 
 ENV NODE_ENV production
+ENV NEXT_TELEMETRY_DISABLED 1
 
-# We only need the public folder, the built .next folder, and node_modules (or standalone)
-# For simplicity in this demo, we'll use a basic next start setup
-COPY --from=builder /app/next.config.ts ./
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# Copy only the standalone output and static assets
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
 
 EXPOSE 3000
 
-CMD ["npm", "start"]
+ENV PORT 3000
+ENV HOSTNAME "0.0.0.0"
+
+CMD ["node", "server.js"]

@@ -8,15 +8,23 @@ const geistMono = { variable: "font-mono" };
 export const metadata: Metadata = {
   title: "DecisionLens AI | Strategic Intelligence Platform",
   description: "Advanced multi-criteria decision support system for enterprise strategy.",
-  manifest: "/manifest.json",
+
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "DecisionLens AI",
+    startupImage: [
+       '/decision_ai_bg.png',
+    ],
   },
   formatDetection: {
     telephone: false,
   },
+  other: {
+    "apple-mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-status-bar-style": "black-translucent",
+    "mobile-web-app-capable": "yes",
+  }
 };
 
 export const viewport = {
@@ -56,15 +64,17 @@ export default function RootLayout({
           <TelemetryProvider>
             <SyncHub />
             <PWAInstallPrompt />
-            <div className="flex min-h-screen">
+            <div className="flex min-h-screen supports-[min-height:100dvh]:min-h-[100dvh]">
               <DesktopSidebar />
-              <div className="flex-1 flex flex-col md:pl-64 group-hover:md:pl-72 transition-all duration-500">
+              <div className="flex-1 flex flex-col md:pl-20 group-hover:md:pl-72 transition-all duration-500">
                 <BottomNav />
                 <KeyboardShortcuts />
                 <CommandPalette>
                   <PageTransition>
-                    <main className="flex-1 pb-24 md:pb-0">
-                      {children}
+                    <main className="flex-1 pb-24 md:pb-0 pt-[env(safe-area-inset-top)] px-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
+                      <div className="max-w-[2000px] mx-auto">
+                        {children}
+                      </div>
                     </main>
                   </PageTransition>
                 </CommandPalette>

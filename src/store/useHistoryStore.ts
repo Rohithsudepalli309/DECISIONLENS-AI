@@ -1,4 +1,4 @@
-import { create } from 'zustand'
+import { create, StateCreator, StoreApi, UseBoundStore } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import axios from 'axios'
 import { API_BASE_URL } from '@/lib/api-config'
@@ -75,7 +75,7 @@ interface HistoryState {
   clearHistory: () => void
 }
 
-export const useHistoryStore = create<HistoryState>()(
+export const useHistoryStore = create(
   persist(
     (set) => ({
       audits: [],
@@ -136,5 +136,5 @@ export const useHistoryStore = create<HistoryState>()(
       },
       partialize: (state) => ({ audits: state.audits, lastUpdated: state.lastUpdated }), // Don't persist loading state
     }
-  )
-)
+  ) as StateCreator<HistoryState>
+) as UseBoundStore<StoreApi<HistoryState>>

@@ -6,28 +6,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { ChevronRight, ChevronLeft, IndianRupee, Activity, Check, Cloud, Database } from "lucide-react"
 import { useHaptics } from "@/hooks/useHaptics"
 
-interface OptionItem {
-  name: string;
-  parameters: {
-    base_cost: number;
-    risk: number;
-    availability: number;
-  };
-}
-
-export interface DecisionData {
-  domain: string;
-  goal: string;
-  constraints: {
-    max_cost: number;
-    min_availability: number;
-  };
-  preferences: string[];
-  options: OptionItem[];
-  weights?: number[];
-  algorithm?: 'topsis' | 'ahp';
-  project_name?: string;
-}
+import { DecisionData, OptionItem } from "@/types/decision"
 
 export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData) => void }) {
   const { formData, setFormData, currentStep: step, setStep, syncFromExternal } = useDecisionStore();
@@ -91,7 +70,11 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
   }
 
   return (
-    <div className="max-w-xl mx-auto mt-6 md:mt-12">
+    <div 
+      className="max-w-xl mx-auto mt-6 md:mt-12"
+      role="region"
+      aria-label="Decision Logic Configuration"
+    >
       <div className="flex justify-between mb-8 md:mb-12 relative px-2 md:px-4">
         <div className="absolute top-4 left-0 right-0 h-[1px] bg-white/5 -z-10" />
         {[1, 2, 3, 4].map((s) => (

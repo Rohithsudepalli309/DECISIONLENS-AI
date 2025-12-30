@@ -34,11 +34,8 @@ export function PWAInstallPrompt() {
       setTimeout(() => setShowPrompt(true), 3000)
     }
 
-    window.addEventListener("beforeinstallprompt", handler)
-
-    // Also check if already installed
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-        setShowPrompt(false)
+    if (!window.matchMedia('(display-mode: standalone)').matches) {
+        window.addEventListener("beforeinstallprompt", handler)
     }
 
     return () => window.removeEventListener("beforeinstallprompt", handler)

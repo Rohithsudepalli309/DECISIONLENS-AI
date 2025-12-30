@@ -11,12 +11,11 @@ import { useRouter } from "next/navigation"
 import { API_BASE_URL } from "@/lib/api-config"
 import { Skeleton } from "@/components/Skeleton"
 import { Toast, ToastType } from "@/components/Toast"
-import { DecisionData } from "@/components/DecisionStepper"
-import { DecisionResults } from "@/store/useDecisionStore"
+import { DecisionData, DecisionResults } from "@/types/decision"
 import { SwipeableAuditCard } from "@/components/SwipeableAuditCard"
 import { ForesightAudit } from "@/components/ForesightAudit"
 import { BacktestingDashboard } from "@/components/BacktestingDashboard"
-import { Calendar, Tag, Target, Search, Filter, Play, Download, Trash2, Edit3, FileSpreadsheet, Copy, ArrowRight, RefreshCw, BarChart3, Database } from "lucide-react"
+import { Calendar, Tag, Target, Search, Filter, Play, Download, Trash2, Edit3, FileSpreadsheet, Copy, ArrowRight, RefreshCw } from "lucide-react"
 
 export default function AuditHistory() {
   const { isLoggedIn, hasHydrated: authHydrated } = useAuthStore()

@@ -3,10 +3,16 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ShieldAlert, Key, Lock, Zap, CheckCircle2 } from 'lucide-react';
 
+interface Proposal {
+  action_type: string;
+  confidence: number;
+  proposal_details: Record<string, unknown>;
+}
+
 interface SecurityBunkerProps {
   onExecute: (signatures: string[]) => void;
   onCancel: () => void;
-  proposal: any;
+  proposal: Proposal;
 }
 
 export function SecurityBunker({ onExecute, onCancel, proposal }: SecurityBunkerProps) {

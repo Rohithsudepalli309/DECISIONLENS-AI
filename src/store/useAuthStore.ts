@@ -1,4 +1,4 @@
-import { create } from 'zustand'
+import { create, StateCreator, StoreApi, UseBoundStore } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 
 interface User {
@@ -21,7 +21,7 @@ interface AuthState {
   logout: () => void
 }
 
-export const useAuthStore = create<AuthState>()(
+export const useAuthStore = create(
   persist(
     (set) => ({
       user: null,
@@ -53,5 +53,5 @@ export const useAuthStore = create<AuthState>()(
         return () => state?.setHasHydrated(true)
       }
     }
-  )
-)
+  ) as StateCreator<AuthState>
+) as UseBoundStore<StoreApi<AuthState>>

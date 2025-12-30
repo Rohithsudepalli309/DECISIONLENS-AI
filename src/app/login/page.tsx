@@ -75,6 +75,8 @@ export default function LoginPage() {
       const success = await verifyBiometrics();
       if (success) {
         const lastUser = localStorage.getItem('last_strategist_id') || 'AI_STRATEGIST_01';
+        // SECURITY NOTE: This is a static mock token for biometric demo purposes only.
+        // IN PRODUCTION: Replace with real biometric challenge/response flow or WebAuthn assertion
         const mockToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZW1vX3VzZXIifQ"; 
         loginStore(lastUser, mockToken);
         router.push("/");

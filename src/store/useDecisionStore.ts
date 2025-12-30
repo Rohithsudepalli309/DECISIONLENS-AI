@@ -1,45 +1,8 @@
-import { create } from 'zustand'
+import { create, StateCreator, StoreApi, UseBoundStore } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import axios from 'axios'
-import type { DecisionData } from '@/components/DecisionStepper'
-export type { DecisionData }
-
-export interface DecisionResults {
-  id?: number;
-  strategy?: string;
-  domain?: string;
-  ranked_options?: {
-    option: string;
-    topsis_score: number;
-    is_pareto_optimal?: boolean;
-    metrics: {
-      cost: number;
-      availability: number;
-      risk: number;
-    };
-  }[];
-  simulations?: {
-    option: string;
-    simulation: {
-      cost_dist: number[];
-      availability_dist: number[];
-      risk_dist: number[];
-      expected: {
-        cost: number;
-        availability: number;
-        risk: number;
-      };
-    };
-  }[];
-  options?: any[];
-  simulation_results?: any;
-  weights?: number[];
-  sensitivity?: any;
-  correlations?: any[];
-  narrative?: string;
-  chaos_report?: any;
-  consensus_report?: any;
-}
+import { DecisionData, DecisionResults } from '@/types/decision'
+export type { DecisionData, DecisionResults }
 
 interface Guardrails {
   iterations: number
@@ -56,6 +19,8 @@ interface DecisionState {
   guardrails: Guardrails
   offlineQueue: DecisionData[]
   isSyncing: boolean
+  connectionQuality: 'high' | 'low'
+  isSyncPaused: boolean
   setIsSyncing: (state: boolean) => void
   
   setFormData: (data: DecisionData) => void;
@@ -66,16 +31,17 @@ interface DecisionState {
   setGuardrails: (guardrails: Guardrails) => void;
   resetDecision: () => void;
   initializeWS: (projectName: string) => void;
-  syncParam: (data: any) => void;
+  syncParam: (data: Record<string, unknown>) => void;
   queueOfflineSubmission: (data: DecisionData) => void;
   processOfflineQueue: (token: string, API_BASE_URL: string) => Promise<void>;
-  applyAIProposal: (proposal: any) => void;
+  applyAIProposal: (proposal: Record<string, unknown>) => void;
   syncFromExternal: (source: 'cloud' | 'market', API_BASE_URL: string) => Promise<void>;
   runChaosTest: (API_BASE_URL: string) => Promise<void>;
   runConsensusAudit: (API_BASE_URL: string) => Promise<void>;
   updateResults: (results: Partial<DecisionResults>) => void;
   pushState: (token: string, API_BASE_URL: string) => Promise<void>;
   fetchState: (token: string, API_BASE_URL: string) => Promise<void>;
+  activeSocket?: WebSocket;
 }
 
 const initialFormData: DecisionData = {
@@ -101,7 +67,7 @@ const defaultGuardrails: Guardrails = {
   volatilityThreshold: 0.1
 }
 
-export const useDecisionStore = create<DecisionState>()(
+export const useDecisionStore = create(
   persist(
     (set, get) => ({
       formData: initialFormData,
@@ -112,11 +78,13 @@ export const useDecisionStore = create<DecisionState>()(
       guardrails: defaultGuardrails,
       offlineQueue: [],
       isSyncing: false,
+      connectionQuality: 'high',
+      isSyncPaused: false,
       setIsSyncing: (state: boolean) => set({ isSyncing: state }),
 
       setFormData: (data: DecisionData) => {
         set({ formData: data });
-        const s = get() as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+        const s = get();
         if (s.activeSocket && s.activeSocket.readyState === WebSocket.OPEN) {
           s.activeSocket.send(JSON.stringify({ type: 'PARAM_SYNC', formData: data }));
         }
@@ -135,7 +103,7 @@ export const useDecisionStore = create<DecisionState>()(
       }),
 
       initializeWS: (projectName: string) => {
-        const s = get() as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+        const s = get();
         if (s.activeSocket) s.activeSocket.close();
         
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -151,11 +119,28 @@ export const useDecisionStore = create<DecisionState>()(
            }
         };
 
-        set({ activeSocket: socket } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+        set({ activeSocket: socket });
+
+        // Network Information API Integration
+        if ('connection' in navigator) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const conn = (navigator as any).connection;
+            const updateConnection = () => {
+                const isLow = conn.saveData || conn.effectiveType === '2g' || conn.effectiveType === 'slow-2g';
+                set({ 
+                    connectionQuality: isLow ? 'low' : 'high',
+                    isSyncPaused: isLow
+                });
+                if (isLow) console.warn("Network Quality Low: Pausing Background Sync");
+            };
+            conn.addEventListener('change', updateConnection);
+            updateConnection();
+        }
       },
 
-      syncParam: (dataValue: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-        const s = get() as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+      syncParam: (dataValue: Record<string, unknown>) => {
+        const s = get();
+        if (s.isSyncPaused) return; // Skip sync on low bandwidth
         if (s.activeSocket && s.activeSocket.readyState === WebSocket.OPEN) {
           s.activeSocket.send(JSON.stringify(dataValue));
         }
@@ -308,5 +293,5 @@ export const useDecisionStore = create<DecisionState>()(
         return () => state?.setHasHydrated(true)
       }
     }
-  )
-)
+  ) as StateCreator<DecisionState>
+) as UseBoundStore<StoreApi<DecisionState>>

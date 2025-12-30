@@ -4,7 +4,9 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { Points, PointMaterial, Center, Float, Text } from '@react-three/drei';
 import * as THREE from 'three';
 
-function ManifoldPoints({ data }: { data: any[] }) {
+import { ManifoldData } from '@/types/decision'
+
+function ManifoldPoints({ data }: { data: ManifoldData[] }) {
   const pointsRef = useRef<THREE.Points>(null!);
 
   const [positions, colors] = useMemo(() => {
@@ -28,8 +30,10 @@ function ManifoldPoints({ data }: { data: any[] }) {
     return [pos, cols];
   }, [data]);
 
-  useFrame((state) => {
-    pointsRef.current.rotation.y += 0.002;
+  useFrame(() => {
+    if (pointsRef.current) {
+        pointsRef.current.rotation.y += 0.002;
+    }
   });
 
   return (
@@ -46,7 +50,7 @@ function ManifoldPoints({ data }: { data: any[] }) {
   );
 }
 
-export function StrategicManifold({ data }: { data: any[] }) {
+export function StrategicManifold({ data }: { data: ManifoldData[] }) {
   if (!data || data.length === 0) return null;
 
   return (

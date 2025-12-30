@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, Suspense } from "react"
 import { Navbar } from "@/components/Navbar"
-import { DecisionStepper, DecisionData } from "@/components/DecisionStepper"
+import { DecisionStepper } from "@/components/DecisionStepper"
+import { DecisionData } from "@/types/decision"
 import { motion, AnimatePresence } from "framer-motion"
 import { 
   BrainCircuit, Zap, Shield, ArrowRight, HomeIcon, 
@@ -18,6 +19,7 @@ import { useDecisionStore } from "@/store/useDecisionStore"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Toast, ToastType } from "@/components/Toast"
 import { Skeleton } from "@/components/Skeleton"
+import { LoaderOverlay } from "@/components/LoaderOverlay"
 
 function HomeContent() {
   const { isLoggedIn, hasHydrated: authHydrated } = useAuthStore()
@@ -28,8 +30,7 @@ function HomeContent() {
     setResults, 
     hasHydrated: decisionHydrated,
     queueOfflineSubmission,
-    processOfflineQueue,
-    offlineQueue
+    processOfflineQueue
   } = useDecisionStore()
   
   const router = useRouter()
@@ -42,9 +43,9 @@ function HomeContent() {
   } | null>(null)
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null)
 
-  const showToast = (message: string, type: ToastType = 'info') => {
+  const showToast = React.useCallback((message: string, type: ToastType = 'info') => {
     setToast({ message, type })
-  }
+  }, [])
 
   const fetchStats = async () => {
     try {
@@ -93,7 +94,9 @@ function HomeContent() {
     return () => window.removeEventListener('online', handleOnline)
   }, [isLoggedIn, processOfflineQueue, showToast])
 
-  if (!authHydrated || !decisionHydrated || !isLoggedIn) return null
+  if (!authHydrated || !decisionHydrated || !isLoggedIn) {
+    return <LoaderOverlay isLoading={true} message="Authenticating & Restoring Sessions..." />
+  }
 
   const handleAnalyze = async (formData: DecisionData) => {
     if (!navigator.onLine) {
