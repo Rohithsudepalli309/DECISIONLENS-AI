@@ -13,6 +13,10 @@
   
 
   --radius: 1rem;
+
+  /* Native Perfection Constants */
+  --nav-bottom-height: calc(4rem + env(safe-area-inset-bottom));
+  --sidebar-width: 16rem;
 }
 
 [data-theme="light"] {

@@ -1,27 +1,21 @@
 "use client"
 
 import React from "react"
-import { BrainCircuit, Command, History, Settings, FileText, Activity, Zap, Globe } from "lucide-react"
+import { BrainCircuit, Command, Zap, Globe, CloudCheck, RefreshCw } from "lucide-react"
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
 import { useAuthStore } from "@/store/useAuthStore"
+import { useDecisionStore } from "@/store/useDecisionStore"
 import axios from "axios"
 import { API_BASE_URL } from "@/lib/api-config"
 import { ThemeToggle } from "./ThemeToggle"
+import { useI18n } from "@/hooks/useI18n"
 import { LanguageToggle } from "./LanguageToggle"
 
 export function Navbar() {
+  const { t } = useI18n()
   const [isScrolled, setIsScrolled] = React.useState(false)
-  const pathname = usePathname()
-  const router = useRouter()
-  const { isLoggedIn, user, logout } = useAuthStore()
-
-  const handleLogout = () => {
-    if (confirm("Disconnect session? Unsaved simulation parameters will be lost.")) {
-      logout()
-      router.push("/login")
-    }
-  }
+  const { isLoggedIn, user } = useAuthStore()
+  const { isSyncing } = useDecisionStore()
 
   React.useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20)
@@ -51,23 +45,18 @@ export function Navbar() {
     return () => clearInterval(interval)
   }, [])
 
-  if (pathname === "/login") return null
-
-  const navLinks = [
-    { name: "Engine", href: "/", icon: Zap },
-    { name: "Simulations", href: "#", icon: Activity },
-    { name: "Audit Log", href: "/history", icon: History },
-    { name: "Settings", href: "/settings", icon: Settings },
-    { name: "Docs", href: "#", icon: FileText },
-  ]
-
   return (
     <>
-      <nav className={`fixed top-0 left-0 right-0 z-50 px-4 md:px-8 py-3 md:py-4 transition-all duration-300 ${
+      {status === 'offline' && (
+        <div className="fixed top-0 left-0 right-0 z-[60] bg-red-600 text-white py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-center md:pl-64 group-hover:md:pl-72 transition-all duration-500">
+          Neural Link Severed // Operating in Offline Mode
+        </div>
+      )}
+      <nav className={`fixed top-0 left-0 right-0 z-50 px-4 md:px-8 py-3 md:py-4 transition-all duration-300 md:left-64 group-hover:md:left-72 ${
         isScrolled ? "bg-black/80 backdrop-blur-xl border-b border-white/10" : "bg-transparent"
-      }`}>
+      } ${status === 'offline' ? 'mt-8' : ''}`}>
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 group">
+          <Link href="/" className="flex items-center gap-2 group md:hidden">
             <div className="p-1.5 md:p-2 rounded-lg bg-blue-600/20 border border-blue-500/30 group-hover:bg-blue-600/40 transition-all">
               <BrainCircuit className="w-5 h-5 md:w-6 md:h-6 text-blue-400" />
             </div>
@@ -76,17 +65,9 @@ export function Navbar() {
             </span>
           </Link>
 
-          {/* Desktop Nav */}
-          <div className="hidden md:flex items-center gap-8 text-[10px] font-black uppercase tracking-[0.2em]">
-            {navLinks.map((link) => (
-              <Link 
-                key={link.name} 
-                href={link.href} 
-                className={`transition-colors hover:text-white ${pathname === link.href ? 'text-blue-400' : 'text-white/40'}`}
-              >
-                {link.name}
-              </Link>
-            ))}
+          <div className="hidden md:flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/40 italic">
+            <Zap className="w-3 h-3 text-blue-400" />
+            Terminal active // {user?.username}@{user?.org_name || 'LOCAL'}
           </div>
 
           <div className="flex items-center gap-4 md:gap-6">
@@ -113,16 +94,20 @@ export function Navbar() {
             
             {isLoggedIn ? (
               <div className="flex items-center gap-3">
-                <div className="hidden lg:flex flex-col items-end">
-                  <span className="text-[8px] font-black text-white/20 uppercase tracking-widest leading-none mb-1">Assigned Station</span>
-                  <span className="text-[10px] font-bold text-blue-400 font-mono leading-none uppercase">{user?.terminalId}</span>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20">
+                  {isSyncing ? (
+                    <RefreshCw className="w-3 h-3 text-blue-400 animate-spin" />
+                  ) : (
+                    <CloudCheck className="w-3 h-3 text-blue-400" />
+                  )}
+                  <span className="text-[8px] font-black text-blue-400 uppercase tracking-widest hidden lg:block">
+                    {isSyncing ? t('syncing') : t('sync_stable')}
+                  </span>
                 </div>
-                <button 
-                  onClick={handleLogout}
-                  className="hidden sm:block px-6 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-[10px] font-black uppercase text-red-500 hover:bg-red-500/20 transition-all"
-                >
-                  Sign Off
-                </button>
+                <div className="hidden lg:flex flex-col items-end">
+                  <span className="text-[8px] font-black text-white/20 uppercase tracking-widest leading-none mb-1">Status</span>
+                  <span className="text-[10px] font-black text-blue-400 font-mono leading-none uppercase">AUTHENTICATED</span>
+                </div>
               </div>
             ) : (
               <Link 
@@ -133,7 +118,6 @@ export function Navbar() {
               </Link>
             )}
 
-            {/* Mobile Actions Overlay (Instead of Menu) */}
             <div className="md:hidden flex items-center gap-2">
                <ThemeToggle />
             </div>
@@ -141,5 +125,5 @@ export function Navbar() {
         </div>
       </nav>
     </>
-  )
+  );
 }

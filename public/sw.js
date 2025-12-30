@@ -33,15 +33,47 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.mode === 'navigate') {
+  const { request } = event;
+  const url = new URL(request.url);
+
+  // 1. Navigation strategy (Offline mode)
+  if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => {
+      fetch(request).catch(() => {
         return caches.match('/offline.html');
       })
     );
     return;
   }
 
+  // 2. Static Assets (Stale-While-Revalidate)
+  if (
+    request.destination === 'style' ||
+    request.destination === 'script' ||
+    request.destination === 'image' ||
+    url.pathname.endsWith('.woff2')
+  ) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then((cache) => {
+        return cache.match(request).then((cachedResponse) => {
+          const fetchedResponse = fetch(request).then((networkResponse) => {
+            cache.put(request, networkResponse.clone());
+            return networkResponse;
+          });
+          return cachedResponse || fetchedResponse;
+        });
+      })
+    );
+    return;
+  }
+
+  // 3. API Falls (Network First, no cache for simulation data to avoid stale states)
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
+  // Default: Cache First
   event.respondWith(
     caches.match(event.request).then((response) => {
       return response || fetch(event.request);

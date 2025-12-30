@@ -55,6 +55,8 @@ interface DecisionState {
   hasHydrated: boolean
   guardrails: Guardrails
   offlineQueue: DecisionData[]
+  isSyncing: boolean
+  setIsSyncing: (state: boolean) => void
   
   setFormData: (data: DecisionData) => void;
   setStep: (step: number) => void;
@@ -72,6 +74,8 @@ interface DecisionState {
   runChaosTest: (API_BASE_URL: string) => Promise<void>;
   runConsensusAudit: (API_BASE_URL: string) => Promise<void>;
   updateResults: (results: Partial<DecisionResults>) => void;
+  pushState: (token: string, API_BASE_URL: string) => Promise<void>;
+  fetchState: (token: string, API_BASE_URL: string) => Promise<void>;
 }
 
 const initialFormData: DecisionData = {
@@ -107,6 +111,8 @@ export const useDecisionStore = create<DecisionState>()(
       hasHydrated: false,
       guardrails: defaultGuardrails,
       offlineQueue: [],
+      isSyncing: false,
+      setIsSyncing: (state: boolean) => set({ isSyncing: state }),
 
       setFormData: (data: DecisionData) => {
         set({ formData: data });
@@ -251,6 +257,48 @@ export const useDecisionStore = create<DecisionState>()(
       updateResults: (newResults: Partial<DecisionResults>) => {
         const { results } = get();
         set({ results: results ? { ...results, ...newResults } : (newResults as DecisionResults) });
+      },
+
+      pushState: async (token: string, API_BASE_URL: string) => {
+        const { formData, currentStep, results, guardrails, setIsSyncing } = get();
+        setIsSyncing(true);
+        try {
+          await axios.post(`${API_BASE_URL}/auth/state`, {
+            formData,
+            currentStep,
+            results,
+            guardrails
+          }, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+        } catch (e) {
+          console.error("Cloud sync push failed:", e);
+        } finally {
+          setIsSyncing(false);
+        }
+      },
+
+      fetchState: async (token: string, API_BASE_URL: string) => {
+        const { setIsSyncing } = get();
+        setIsSyncing(true);
+        try {
+          const res = await axios.get(`${API_BASE_URL}/auth/state`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (res.data.state) {
+            const { formData, currentStep, results, guardrails } = res.data.state;
+            set({ 
+              formData: formData || get().formData,
+              currentStep: currentStep || get().currentStep,
+              results: results || get().results,
+              guardrails: guardrails || get().guardrails
+            });
+          }
+        } catch (e) {
+          console.error("Cloud sync fetch failed:", e);
+        } finally {
+          setIsSyncing(false);
+        }
       }
     }),
     {

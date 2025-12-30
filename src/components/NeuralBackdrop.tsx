@@ -60,12 +60,26 @@ export function NeuralBackdrop() {
 
     const initParticles = () => {
       if (!canvas) return
-      const count = Math.floor((canvas.width * canvas.height) / 25000)
+      const isMobile = window.innerWidth < 768
+      const density = isMobile ? 50000 : 25000
+      const count = Math.floor((canvas.width * canvas.height) / density)
       particles = Array.from({ length: count }, () => new Particle(canvas))
     }
 
-    const animate = () => {
+    let lastTime = 0
+    const animate = (time: number) => {
       if (!ctx || !canvas) return
+      
+      // Hardware Throttling: Skip frames on mobile to save battery/GPU
+      const isMobile = window.innerWidth < 768
+      const frameThreshold = isMobile ? 32 : 16 // ~30fps vs ~60fps
+      
+      if (time - lastTime < frameThreshold) {
+        animationFrameId = requestAnimationFrame(animate)
+        return
+      }
+      lastTime = time
+
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       
       particles.forEach((p, i) => {
@@ -94,7 +108,7 @@ export function NeuralBackdrop() {
 
     window.addEventListener('resize', resize)
     resize()
-    animate()
+    requestAnimationFrame(animate)
 
     return () => {
       window.removeEventListener('resize', resize)

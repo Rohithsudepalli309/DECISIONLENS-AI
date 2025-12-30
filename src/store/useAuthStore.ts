@@ -6,6 +6,8 @@ interface User {
   username: string
   terminalId: string
   role: string
+  org_id?: number
+  org_name?: string
 }
 
 interface AuthState {
@@ -15,7 +17,7 @@ interface AuthState {
   lastLogin: string | null
   hasHydrated: boolean
   setHasHydrated: (state: boolean) => void
-  login: (username: string, token: string) => void
+  login: (username: string, token: string, org_id?: number, org_name?: string) => void
   logout: () => void
 }
 
@@ -28,7 +30,7 @@ export const useAuthStore = create<AuthState>()(
       lastLogin: null,
       hasHydrated: false,
       setHasHydrated: (state: boolean) => set({ hasHydrated: state }),
-      login: (username: string, token: string) => 
+      login: (username, token, org_id, org_name) => 
         set({ 
           isLoggedIn: true, 
           token,
@@ -36,7 +38,9 @@ export const useAuthStore = create<AuthState>()(
             id: Math.floor(Math.random() * 1000) + 1,
             username, 
             terminalId: `DL-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
-            role: 'Senior Strategic Analyst' 
+            role: 'Senior Strategic Analyst',
+            org_id,
+            org_name
           },
           lastLogin: new Date().toISOString()
         }),

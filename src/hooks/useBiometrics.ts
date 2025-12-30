@@ -1,47 +1,61 @@
-
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 export const useBiometrics = () => {
   const [isSupported, setIsSupported] = useState<boolean>(false);
+  const [isRegistered, setIsRegistered] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('dl_biometrics_enabled') === 'true';
+    }
+    return false;
+  });
 
-  // Check for biometric support on mount
-  useState(() => {
+  useEffect(() => {
     if (typeof window !== 'undefined' && window.PublicKeyCredential) {
       PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
         .then(setIsSupported)
         .catch(() => setIsSupported(false));
     }
-  });
+  }, []);
 
   const registerBiometrics = useCallback(async (username: string) => {
     if (!isSupported) return null;
 
     try {
-      // Mock challenge from server
+      // In a real app, this challenge would come from the backend
       const challenge = new Uint8Array(32);
       window.crypto.getRandomValues(challenge);
 
       const credential = await navigator.credentials.create({
         publicKey: {
           challenge,
-          rp: { name: "DecisionLens AI" },
+          rp: { name: "DecisionLens AI", id: window.location.hostname },
           user: {
-            id: new Uint8Array(16),
+            id: new TextEncoder().encode(username),
             name: username,
             displayName: username
           },
-          pubKeyCredParams: [{ alg: -7, type: "public-key" }],
+          pubKeyCredParams: [
+            { alg: -7, type: "public-key" }, // ES256
+            { alg: -257, type: "public-key" } // RS256
+          ],
           authenticatorSelection: {
             authenticatorAttachment: "platform",
-            userVerification: "required"
-          }
+            userVerification: "required",
+            residentKey: "preferred"
+          },
+          timeout: 60000,
+          attestation: "none"
         }
       });
 
+      if (credential) {
+        localStorage.setItem('dl_biometrics_enabled', 'true');
+        setIsRegistered(true);
+      }
       return credential;
     } catch (err) {
       console.error("Biometric registration failed:", err);
-      return null;
+      throw err;
     }
   }, [isSupported]);
 
@@ -55,7 +69,7 @@ export const useBiometrics = () => {
       const assertion = await navigator.credentials.get({
         publicKey: {
           challenge,
-          allowCredentials: [], // In real world, this would be populated from backend
+          timeout: 60000,
           userVerification: "required"
         }
       });
@@ -67,5 +81,5 @@ export const useBiometrics = () => {
     }
   }, [isSupported]);
 
-  return { isSupported, registerBiometrics, verifyBiometrics };
+  return { isSupported, isRegistered, registerBiometrics, verifyBiometrics };
 };

@@ -5,9 +5,12 @@ import { motion, AnimatePresence } from "framer-motion"
 import { AreaClosed } from "@visx/shape"
 import { scaleLinear } from "@visx/scale"
 import { curveBasis } from "@visx/curve"
-import { AlertTriangle, ShieldCheck, BarChart3, Fingerprint, Activity, Target, ChevronUp, Share2, Zap, Sparkles, AlertOctagon, ShieldAlert, Users, Briefcase, Scale, Box, Lock } from 'lucide-react'
+import { AlertTriangle, ShieldCheck, BarChart3, Fingerprint, Activity, Target, ChevronUp, Share2, Zap, Sparkles, AlertOctagon, ShieldAlert, Users, Briefcase, Scale, Box, Lock, FileDown, Download } from 'lucide-react'
 import { StrategicManifold } from './StrategicManifold'
 import { SecurityBunker } from './SecurityBunker'
+import { useI18n } from '@/hooks/useI18n'
+import { API_BASE_URL } from '@/lib/api-config'
+import axios from "axios"
 
 // Helper to bin distribution data
 const binData = (values: number[], bins: number = 40) => {
@@ -39,14 +42,18 @@ const formatIndianCurrency = (value: number) => {
 
 
 import { RadarChart, RadarData } from "./RadarChart"
-import axios from "axios"
-import { API_BASE_URL } from "@/lib/api-config"
 import { ErrorBoundary } from "./ErrorBoundary"
 import { WaterfallChart } from "./WaterfallChart"
 import { useHaptics } from "@/hooks/useHaptics"
 import { DecisionResults, useDecisionStore } from "@/store/useDecisionStore"
 
-type RankedOption = DecisionResults['ranked_options'][0];
+type RankedOption = NonNullable<DecisionResults['ranked_options']>[0];
+
+interface PersonaEvaluation {
+  top_choice: string;
+  scores: Record<string, number>;
+  reasoning?: string;
+}
 
 interface ForecastData {
   status: string;
@@ -64,6 +71,7 @@ interface ForecastData {
 import { ParentSize } from "@visx/responsive"
 
 export function ResultDashboard({ results: initialResults }: { results: DecisionResults }) {
+  const { t } = useI18n()
   const [results, setResults] = React.useState<DecisionResults>(initialResults)
   const [weights, setWeights] = React.useState<number[]>([0.4, 0.4, 0.2])
   const [loading, setLoading] = React.useState(false)
@@ -108,7 +116,18 @@ export function ResultDashboard({ results: initialResults }: { results: Decision
   const [horizon, setHorizon] = React.useState(30)
   const [fetchingForecast, setFetchingForecast] = React.useState(false)
   const [intent, setIntent] = React.useState("");
-  const [proposals, setProposals] = React.useState<any[]>([]);
+  
+  interface StrategicProposal {
+    action_type: string;
+    proposal_details: {
+      reason: string;
+      [key: string]: unknown;
+    };
+    confidence: number;
+    expected_impact: string;
+  }
+
+  const [proposals, setProposals] = React.useState<StrategicProposal[]>([]);
   const [isProposing, setIsProposing] = React.useState(false);
 
   React.useEffect(() => {
@@ -143,7 +162,7 @@ export function ResultDashboard({ results: initialResults }: { results: Decision
   const [showDetails, setShowDetails] = React.useState(false)
   const [isPresentationMode, setIsPresentationMode] = React.useState(false)
   const [activeTab, setActiveTab] = React.useState<'overview' | 'simulation' | '3d'>('overview')
-  const [bunkerProposal, setBunkerProposal] = React.useState<any | null>(null)
+  const [bunkerProposal, setBunkerProposal] = React.useState<StrategicProposal | null>(null)
 
   const togglePresentation = () => {
     haptics.heavy()
@@ -244,17 +263,17 @@ export function ResultDashboard({ results: initialResults }: { results: Decision
         </div>
       </div>
       {/* Executive Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
         {(results.ranked_options || []).map((opt: RankedOption, i: number) => (
           <motion.div 
             key={opt.option}
             layout
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className={`glass-card border-none relative overflow-hidden transition-all duration-500 ${
-              isPresentationMode ? "p-8 md:p-12 min-h-[300px] flex flex-col justify-center" : ""
+            className={`glass-card border-none relative overflow-hidden transition-all duration-500 h-full flex flex-col ${
+              isPresentationMode ? "p-8 md:p-12 min-h-[300px] justify-center" : "p-5 md:p-6 min-h-[160px]"
             } ${
-              i === 0 ? " ring-2 ring-blue-500/50 sm:scale-[1.02] shadow-2xl shadow-blue-500/20 bg-blue-500/5" : ""
+              i === 0 ? " ring-2 ring-blue-500/50 xl:scale-[1.02] shadow-2xl shadow-blue-500/20 bg-blue-500/5" : ""
             }`}
           >
             {i === 0 && (
@@ -290,9 +309,10 @@ export function ResultDashboard({ results: initialResults }: { results: Decision
         {typeof navigator !== 'undefined' && navigator.share && (
           <button
             onClick={() => {
+              const firstOption = results.ranked_options?.[0];
               navigator.share({
-                title: `DecisionLens: ${results.ranked_options?.[0]?.option || 'Decision Analysis'}`,
-                text: `Strategic Analysis recommends ${results.ranked_options?.[0]?.option || 'an option'} with ${(results.ranked_options?.[0]?.topsis_score * 100).toFixed(0)}% fit.`,
+                title: `DecisionLens: ${firstOption?.option || 'Decision Analysis'}`,
+                text: `Strategic Analysis recommends ${firstOption?.option || 'an option'} with ${( (firstOption?.topsis_score || 0) * 100).toFixed(0)}% fit.`,
                 url: window.location.href
               }).catch(console.error)
             }}
@@ -303,11 +323,30 @@ export function ResultDashboard({ results: initialResults }: { results: Decision
           </button>
         )}
 
+        {results.id && (
+          <>
+            <button
+              onClick={() => window.open(`${API_BASE_URL}/decision/export/${results.id || 'latest'}`, '_blank')}
+              className="flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30 text-xs font-bold uppercase tracking-widest transition-colors"
+            >
+               <FileDown className="w-4 h-4" />
+               {t('export_pdf')}
+            </button>
+            <button
+              onClick={() => window.open(`${API_BASE_URL}/decision/export/csv/${results.id}`, '_blank')}
+              className="flex items-center gap-2 px-4 py-2 rounded-full bg-purple-600/20 text-purple-400 border border-purple-500/30 hover:bg-purple-600/30 text-xs font-bold uppercase tracking-widest transition-colors"
+            >
+               <Download className="w-4 h-4" />
+               {t('export_csv')}
+            </button>
+          </>
+        )}
+
         <button 
           onClick={() => setShowDetails(!showDetails)}
           className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 text-xs font-bold uppercase tracking-widest transition-colors"
         >
-           {showDetails ? "Hide Technical Analysis" : "View Deep Dive Analysis"}
+           {showDetails ? t('hide_details') : t('deep_dive')}
            <ChevronUp className={`w-4 h-4 transition-transform ${showDetails ? "" : "rotate-180"}`} />
         </button>
       </div>
@@ -323,7 +362,7 @@ export function ResultDashboard({ results: initialResults }: { results: Decision
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
               <div className="glass-card lg:col-span-2 p-4 md:p-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 md:mb-8 gap-4">
-                  <h3 className="text-base md:text-lg font-bold italic uppercase tracking-tighter">Tradeoff Matrix</h3>
+                  <h3 className="text-base md:text-lg font-bold italic uppercase tracking-tighter">{t('tradeoff_matrix')}</h3>
                   <div className="w-fit text-[8px] md:text-[10px] text-blue-400 font-bold bg-blue-500/10 px-2 py-1 rounded border border-blue-500/20 uppercase tracking-widest">
                     Multi-Vector Analysis
                   </div>
@@ -370,9 +409,9 @@ export function ResultDashboard({ results: initialResults }: { results: Decision
         </div>
 
         <div className="space-y-6 md:space-y-8">
-          <div className="glass-card p-4 md:p-6">
+          <div className="glass-card p-4 md:p-6 h-full">
             <h3 className="text-base md:text-lg font-black uppercase italic tracking-tighter mb-6 underline decoration-blue-500/40">Density Distribution</h3>
-            <div className="h-[200px] md:h-[250px] relative pt-4">
+            <div className="h-[220px] md:h-[280px] relative pt-4">
               <div className="absolute top-0 right-0 text-[8px] md:text-[10px] text-white/20 font-black uppercase tracking-widest">
                 Peak: {Math.max(...distributionData.map(d => d.y))} iterations
               </div>
@@ -592,7 +631,7 @@ export function ResultDashboard({ results: initialResults }: { results: Decision
                                STRATEGIC TRAP DETECTED: This recommendation collapses under high variance. Consider pivoting constraints.
                             </p>
                          </div>
-                      )}
+                      ) : null}
                    </div>
                  ) : (
                    <p className="text-[10px] text-white/40 italic">Run Chaos Monkey stress test to identify black-swan failure points.</p>
@@ -629,32 +668,35 @@ export function ResultDashboard({ results: initialResults }: { results: Decision
                        </div>
 
                        <div className="flex gap-4 mb-4">
-                          {Object.entries(storeResults.consensus_report.persona_evaluations || {}).map(([role, evalData]: [string, any]) => (
-                             <div key={role} className="flex-1 text-center p-2 rounded bg-white/5 border border-white/10 hover:border-purple-500/30 transition-all group/persona">
-                                <div className="w-8 h-8 mx-auto mb-2 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400">
-                                   {role === 'CFO' && <Briefcase className="w-4 h-4" />}
-                                   {role === 'CTO' && <Zap className="w-4 h-4" />}
-                                   {role === 'RiskOfficer' && <ShieldCheck className="w-4 h-4" />}
+                          {Object.entries(storeResults.consensus_report.persona_evaluations || {}).map(([role, evalData]) => {
+                             const data = evalData as PersonaEvaluation;
+                             return (
+                                <div key={role} className="flex-1 text-center p-2 rounded bg-white/5 border border-white/10 hover:border-purple-500/30 transition-all group/persona">
+                                   <div className="w-8 h-8 mx-auto mb-2 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400">
+                                      {role === 'CFO' && <Briefcase className="w-4 h-4" />}
+                                      {role === 'CTO' && <Zap className="w-4 h-4" />}
+                                      {role === 'RiskOfficer' && <ShieldCheck className="w-4 h-4" />}
+                                   </div>
+                                   <p className="text-[8px] font-black text-white/60 mb-1">{role}</p>
+                                   <p className="text-[7px] text-white/40 truncate mb-2">{data.top_choice}</p>
+                                   <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                                      <div 
+                                        className="h-full bg-purple-500" 
+                                        style={{ width: `${((data.scores?.[data.top_choice] || 0) * 100)}%` }}
+                                      />
+                                   </div>
                                 </div>
-                                <p className="text-[8px] font-black text-white/60 mb-1">{role}</p>
-                                <p className="text-[7px] text-white/40 truncate mb-2">{evalData.top_choice}</p>
-                                <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
-                                   <div 
-                                     className="h-full bg-purple-500" 
-                                     style={{ width: `${(evalData.scores?.[evalData.top_choice] * 100)}%` }}
-                                   />
-                                </div>
-                             </div>
-                          ))}
+                             );
+                          })}
                        </div>
 
-                       {storeResults.consensus_report.is_polarized && (
+                       {storeResults.consensus_report.is_polarized ? (
                           <div className="p-2 rounded bg-red-500/10 border border-red-500/20">
                              <p className="text-[8px] text-red-400 leading-tight">
                                 <span className="font-black uppercase">STAKEHOLDER CONFLICT:</span> The CFO and CTO models have divergent top choices. This strategy requires manual mediation.
                              </p>
                           </div>
-                       )}
+                       ) : null}
                     </div>
                  ) : (
                     <p className="text-[10px] text-white/40 italic">Audit strategy against Virtual CFO, CTO, and Risk personas.</p>
@@ -813,7 +855,7 @@ export function ResultDashboard({ results: initialResults }: { results: Decision
             <SecurityBunker 
               proposal={bunkerProposal}
               onExecute={() => {
-                // applyAIProposal(bunkerProposal); // Removed as per instruction
+                applyAIProposal(bunkerProposal!);
                 setBunkerProposal(null);
                 // Assuming showToast is defined elsewhere or needs to be added
                 // showToast("AI Strategic Proposal Executed & Logged", "success");
@@ -874,8 +916,8 @@ export function ResultDashboard({ results: initialResults }: { results: Decision
            
            <div className="p-4 md:p-8 rounded-2xl md:rounded-3xl bg-black/40 border border-white/5 space-y-4">
               <h4 className="text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 italic">Strategic Tactical Posture</h4>
-              <p className="text-xs md:text-sm italic text-white/80 leading-relaxed">
-                &quot;The recommendation for <strong>{results.ranked_options[0].option}</strong> is primarily indexed on its <strong>{topOption.metrics.cost < 50000 ? 'Cost Superiority' : 'Structural Resilience'}</strong>. 
+               <p className="text-xs md:text-sm italic text-white/80 leading-relaxed">
+                &quot;The recommendation for <strong>{results.ranked_options?.[0]?.option || 'selected'}</strong> is primarily indexed on its <strong>{(topOption?.metrics?.cost || 0) < 50000 ? 'Cost Superiority' : 'Structural Resilience'}</strong>. 
                 Even with weight modulations, the rank remains historically robust.&quot;
               </p>
            </div>

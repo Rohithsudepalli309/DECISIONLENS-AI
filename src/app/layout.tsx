@@ -37,7 +37,9 @@ import { TelemetryProvider } from "@/components/TelemetryProvider";
 
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { BottomNav } from "@/components/BottomNav";
+import { DesktopSidebar } from "@/components/DesktopSidebar";
 import { NeuralBackdrop } from "@/components/NeuralBackdrop";
+import { SyncHub } from "@/components/SyncHub";
 
 export default function RootLayout({
   children,
@@ -47,19 +49,27 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased selection:bg-blue-500/30 bg-[#050505] pb-24 md:pb-0`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased selection:bg-blue-500/30 bg-[#050505]`}
       >
         <NeuralBackdrop />
         <GlobalErrorBoundary>
           <TelemetryProvider>
+            <SyncHub />
             <PWAInstallPrompt />
-            <BottomNav />
-            <KeyboardShortcuts />
-            <CommandPalette>
-              <PageTransition>
-                {children}
-              </PageTransition>
-            </CommandPalette>
+            <div className="flex min-h-screen">
+              <DesktopSidebar />
+              <div className="flex-1 flex flex-col md:pl-64 group-hover:md:pl-72 transition-all duration-500">
+                <BottomNav />
+                <KeyboardShortcuts />
+                <CommandPalette>
+                  <PageTransition>
+                    <main className="flex-1 pb-24 md:pb-0">
+                      {children}
+                    </main>
+                  </PageTransition>
+                </CommandPalette>
+              </div>
+            </div>
             <OnboardingTour />
           </TelemetryProvider>
         </GlobalErrorBoundary>

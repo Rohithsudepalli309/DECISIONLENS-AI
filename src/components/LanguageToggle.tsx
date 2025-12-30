@@ -1,19 +1,17 @@
 "use client"
 
-import React, { useState } from "react"
-// import { Languages } from "lucide-react"
+import React from "react"
+import { useI18n } from "@/hooks/useI18n"
 
 type Language = "en" | "es" | "jp"
 
 export function LanguageToggle() {
-  const [lang, setLang] = useState<Language>("en")
-  const [isOpen, setIsOpen] = useState(false)
+  const { lang, setLang } = useI18n()
+  const [isOpen, setIsOpen] = React.useState(false)
 
   const toggleLang = (l: Language) => {
     setLang(l)
     setIsOpen(false)
-    // In a real app, this would use a context or global store
-    console.log(`Language switched to ${l}`) 
   }
 
   const languages = [

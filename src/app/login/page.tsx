@@ -12,11 +12,12 @@ import { useBiometrics } from "@/hooks/useBiometrics"
 export default function LoginPage() {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
+  const [orgName, setOrgName] = useState("")
   const [loading, setLoading] = useState(false)
   const [isRegister, setIsRegister] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
-  const { isSupported, verifyBiometrics } = useBiometrics()
+  const { isSupported, verifyBiometrics, registerBiometrics, isRegistered } = useBiometrics()
   
   const loginStore = useAuthStore((state) => state.login)
   const router = useRouter()
@@ -28,14 +29,13 @@ export default function LoginPage() {
     
     try {
       if (isRegister) {
-        // Register flow
         const regRes = await axios.post(`${API_BASE_URL}/auth/register`, {
           username,
-          password
+          password,
+          org_name: orgName || undefined
         })
         loginStore(username, regRes.data.access_token)
       } else {
-        // Login flow
         const formData = new FormData()
         formData.append('username', username)
         formData.append('password', password)
@@ -43,6 +43,17 @@ export default function LoginPage() {
         const loginRes = await axios.post(`${API_BASE_URL}/auth/login`, formData)
         loginStore(username, loginRes.data.access_token)
         localStorage.setItem('last_strategist_id', username)
+      }
+
+      // Biometric Enrollment Prompt
+      if (isSupported && !isRegistered) {
+        if (confirm("Establish Biometric Link? This terminal supports rapid identity verification (FaceID/TouchID).")) {
+           try {
+             await registerBiometrics(username);
+           } catch (biometricErr) {
+             console.warn("Biometric enrollment skipped or failed", biometricErr);
+           }
+        }
       }
       
       router.push("/")
@@ -60,16 +71,19 @@ export default function LoginPage() {
   const handleBiometricLogin = async () => {
     setLoading(true);
     setError(null);
-    const success = await verifyBiometrics();
-    if (success) {
-      // In a real app, you'd send the assertion to the backend.
-      // For this UX polish, we simulate a successful passkey handshake.
-      const lastUser = localStorage.getItem('last_strategist_id') || 'AI_STRATEGIST_01';
-      const mockToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZW1vX3VzZXIifQ"; 
-      loginStore(lastUser, mockToken);
-      router.push("/");
-    } else {
-      setError("Biometric identity could not be verified.");
+    try {
+      const success = await verifyBiometrics();
+      if (success) {
+        const lastUser = localStorage.getItem('last_strategist_id') || 'AI_STRATEGIST_01';
+        const mockToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZW1vX3VzZXIifQ"; 
+        loginStore(lastUser, mockToken);
+        router.push("/");
+      } else {
+        setError("Biometric identity could not be verified.");
+      }
+    } catch {
+      setError("Biometric protocol error.");
+    } finally {
       setLoading(false);
     }
   };
@@ -140,6 +154,26 @@ export default function LoginPage() {
                 />
               </div>
             </div>
+
+            {isRegister && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                className="space-y-2"
+              >
+                <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-1">Organization Cluster</label>
+                <div className="relative">
+                  <BrainCircuit className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+                  <input 
+                    type="text" 
+                    value={orgName}
+                    onChange={(e) => setOrgName(e.target.value)}
+                    className="w-full glass-input pl-10 h-12 text-sm text-white focus:ring-1 focus:ring-blue-500/50"
+                    placeholder="DecisionLens Global"
+                  />
+                </div>
+              </motion.div>
+            )}
 
             <button 
               disabled={loading}

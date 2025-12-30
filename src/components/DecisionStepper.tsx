@@ -131,7 +131,7 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
                 <div>
                   <label className="text-xs md:text-sm font-medium text-white/60 mb-2 block">Decision Domain</label>
                   <select 
-                  className="w-full bg-white/5 border border-white/10 rounded-xl p-3 md:p-4 text-sm md:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all appearance-none cursor-pointer"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-sm md:text-base text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all appearance-none cursor-pointer"
                   value={formData.domain}
                   onChange={(e) => {
                     const domain = e.target.value
@@ -341,8 +341,8 @@ export function DecisionStepper({ onAnalyze }: { onAnalyze: (data: DecisionData)
                             <div 
                               key={lvl} 
                               onClick={() => updateWeight(item.index, lvl)}
-                              className={`flex-1 sm:w-8 sm:h-8 h-10 rounded border flex items-center justify-center text-[10px] cursor-pointer transition-all ${
-                                lvl === currentVal ? "bg-blue-600/40 border-blue-400 text-white font-black" : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
+                              className={`flex-1 min-w-[44px] h-11 md:w-10 md:h-10 rounded-lg md:rounded-xl border flex items-center justify-center text-[10px] md:text-xs cursor-pointer transition-all ${
+                                lvl === currentVal ? "bg-blue-600/40 border-blue-400 text-white font-black shadow-[0_0_10px_rgba(59,130,246,0.3)]" : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
                               }`}
                             >
                               {lvl}
